@@ -28,6 +28,30 @@
     "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
 }
 
+html {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: scroll;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 120, 120, 0.55) var(--bg-color);
+}
+
+html::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+html::-webkit-scrollbar-track {
+  background: var(--bg-color);
+}
+
+html::-webkit-scrollbar-thumb {
+  background: rgba(120, 120, 120, 0.55);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
 /* Reset and base styles */
 * {
   margin: 0;
@@ -40,7 +64,6 @@ body {
   background-color: var(--bg-color);
   color: var(--text-color);
   line-height: 1.6;
-  overflow-x: hidden;
 }
 
 /* Floating zoom control stays available while the document scrolls. */
@@ -57,6 +80,11 @@ body {
   border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: var(--hover-shadow);
+}
+
+#history-control {
+  left: 20px;
+  right: auto;
 }
 
 .zoom-btn {

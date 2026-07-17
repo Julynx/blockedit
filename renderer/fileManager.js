@@ -2,6 +2,8 @@
 // Handles opening, saving, and creating new files, plus autosave logic.
 // Communicates with the main process via the secure API exposed in preload.js.
 
+const MAX_HISTORY_BYTES = 256 * 1024 * 1024;
+
 class FileManager {
   /**
    * @param {BlockManager} blockManager - The block manager to serialize/deserialize
@@ -12,6 +14,10 @@ class FileManager {
     this.isDirty = false; // Whether there are unsaved changes
     this.autosaveTimer = null; // Timer for debounced autosave
     this.AUTOSAVE_DELAY = 1000; // 1 second of inactivity triggers save
+    this.historyBase = null;
+    this.history = [];
+    this.historyIndex = 0;
+    this.historyBytes = 0;
 
     // UI elements
     this.fileNameEl = document.getElementById("file-name");
@@ -34,13 +40,15 @@ class FileManager {
 
     this.currentFilePath = null;
     this.isDirty = false;
+    this._resetHistory();
     this._updateUI();
 
     // Create default content: one block with an h1, in render mode
     this.blockManager.deserialize("# New document");
 
     // Add an empty block in edit mode
-    this.blockManager.addBlock();
+    await this.blockManager.addBlock();
+    this.historyBase = this.blockManager.serialize();
   }
 
   /**
@@ -62,6 +70,8 @@ class FileManager {
 
       this.currentFilePath = result.filePath;
       this.isDirty = false;
+      this._resetHistory();
+      this.historyBase = result.content;
       this._updateUI();
 
       // Load the file content into blocks
@@ -94,6 +104,7 @@ class FileManager {
       }
 
       if (result.success) {
+        this._recordCheckpoint(content);
         this.currentFilePath = result.filePath;
         this.isDirty = false;
         this._updateUI();
@@ -109,12 +120,15 @@ class FileManager {
   }
 
   /**
-   * Triggers an autosave if the file has been saved before.
-   * If it's a new file, autosave is skipped (user must save manually first).
+   * Creates an in-memory history checkpoint and writes to disk when the file
+   * has a path. New files still receive undo/redo checkpoints before saving.
    */
   async autosave() {
-    if (this.currentFilePath && this.isDirty) {
-      await this.saveFile();
+    if (this.isDirty) {
+      this._recordCheckpoint(this.blockManager.serialize());
+      if (this.currentFilePath) {
+        await this.saveFile();
+      }
       console.log("Autosaved at", new Date().toLocaleTimeString());
     }
   }
@@ -149,6 +163,12 @@ class FileManager {
     document
       .getElementById("btn-save")
       .addEventListener("click", () => this.saveFile());
+    document
+      .getElementById("undo-btn")
+      .addEventListener("click", () => this.undo());
+    document
+      .getElementById("redo-btn")
+      .addEventListener("click", () => this.redo());
 
     // Keyboard shortcut: Ctrl+S / Cmd+S to save
     document.addEventListener("keydown", (e) => {
@@ -216,6 +236,93 @@ class FileManager {
       this.dirtyIndicatorEl.classList.remove("visible");
       document.title = `${displayName} - Markdown Blocks`;
     }
+    this._updateHistoryUI();
+  }
+
+  _resetHistory() {
+    this.historyBase = null;
+    this.history = [];
+    this.historyIndex = 0;
+    this.historyBytes = 0;
+  }
+
+  _recordCheckpoint(content) {
+    if (this.historyBase === null) {
+      this.historyBase = content;
+      this.history = [];
+      this.historyIndex = 0;
+      return;
+    }
+    const previous = this._contentAt(this.historyIndex);
+    if (previous === content) return;
+    this.history.splice(this.historyIndex);
+    this.history.push(Diff.diffChars(previous, content));
+    this.historyIndex = this.history.length;
+    this._pruneHistory();
+  }
+
+  _pruneHistory() {
+    this.historyBytes = this.history.reduce(
+      (total, diff) => total + this._estimateDiffBytes(diff),
+      0,
+    );
+
+    // Keep at least one checkpoint. A single very large diff is retained so
+    // the newest state remains available even if it exceeds the budget.
+    while (this.historyBytes > MAX_HISTORY_BYTES && this.history.length > 1) {
+      // The first diff becomes the new baseline when its checkpoint is dropped.
+      this.historyBase = this._contentAt(1);
+      this.history.shift();
+      this.historyIndex = Math.max(0, this.historyIndex - 1);
+      this.historyBytes = this.history.reduce(
+        (total, diff) => total + this._estimateDiffBytes(diff),
+        0,
+      );
+    }
+  }
+
+  _estimateDiffBytes(diff) {
+    // Account for UTF-16 string storage plus a small per-change object cost.
+    return diff.reduce((total, part) => total + part.value.length * 2 + 32, 0);
+  }
+
+  _contentAt(index) {
+    let content = this.historyBase;
+    for (let i = 0; i < index; i++) {
+      content = this.history[i]
+        .filter((part) => !part.removed)
+        .map((part) => part.value)
+        .join("");
+    }
+    return content;
+  }
+
+  _loadHistory(index) {
+    this.blockManager.deserialize(this._contentAt(index));
+    this.historyIndex = index;
+    this.isDirty = false;
+    this._updateUI();
+  }
+
+  undo() {
+    if (this.historyBase === null) return;
+    if (this.isDirty) this._loadHistory(this.historyIndex);
+    if (this.historyIndex > 0) this._loadHistory(this.historyIndex - 1);
+  }
+
+  redo() {
+    if (this.historyBase === null) return;
+    if (this.isDirty) this._loadHistory(this.historyIndex);
+    if (this.historyIndex < this.history.length)
+      this._loadHistory(this.historyIndex + 1);
+  }
+
+  _updateHistoryUI() {
+    const enabled = this.historyBase !== null;
+    document.getElementById("undo-btn").disabled =
+      !enabled || this.historyIndex === 0;
+    document.getElementById("redo-btn").disabled =
+      !enabled || this.historyIndex === this.history.length;
   }
 }
 

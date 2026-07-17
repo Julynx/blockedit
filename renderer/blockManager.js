@@ -32,7 +32,13 @@ class BlockManager {
    * @param {boolean} autoEdit - Whether to immediately enter edit mode
    * @returns {Object} The created block data
    */
-  addBlock(index = this.blocks.length, content = "", autoEdit = true) {
+  async addBlock(index = this.blocks.length, content = "", autoEdit = true) {
+    // Commit the active editor before rebuilding the block list. Its text is
+    // still held by the textarea until renderBlock copies it into block.content.
+    if (this.activeEditBlock) {
+      await this.renderBlock(this.activeEditBlock.id);
+    }
+
     const blockData = {
       id: this._generateId(),
       content: content,

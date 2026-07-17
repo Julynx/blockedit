@@ -11,8 +11,8 @@ Easy
 
 Hard
 
-- [ ] Mover los bloques arrastrando
-- [ ] Undo / Redo
+- [x] Mover los bloques arrastrando
+- [x] Undo / Redo
 
 Low priority
 

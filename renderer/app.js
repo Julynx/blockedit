@@ -24,7 +24,13 @@ document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("keydown", (event) => {
     if (!event.ctrlKey) return;
 
-    if (event.key === "+" || event.key === "=") {
+    if (event.key.toLowerCase() === "z") {
+      event.preventDefault();
+      fileManager.undo();
+    } else if (event.key.toLowerCase() === "y") {
+      event.preventDefault();
+      fileManager.redo();
+    } else if (event.key === "+" || event.key === "=") {
       event.preventDefault();
       changeZoom("in");
     } else if (event.key === "-" || event.key === "_") {
