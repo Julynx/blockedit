@@ -164,6 +164,23 @@ body {
   box-shadow: var(--hover-shadow);
 }
 
+.block:not(.editing),
+.block:not(.editing) .block-rendered {
+  cursor: grab;
+}
+
+.block.dragging {
+  opacity: 0.45;
+}
+
+.block.drag-over-top {
+  border-top: 2px solid var(--accent-color);
+}
+
+.block.drag-over-bottom {
+  border-bottom: 2px solid var(--accent-color);
+}
+
 /* Edit mode styles */
 .block.editing {
   box-shadow: var(--edit-shadow);

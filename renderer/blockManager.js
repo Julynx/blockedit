@@ -12,6 +12,8 @@ class BlockManager {
     this.toolbar = new Toolbar();
     this.activeEditBlock = null; // Reference to the block currently in edit mode
     this.selectionStartedInsideBlock = false;
+    this.draggedBlockId = null;
+    this.suppressNextRenderClick = false;
 
     // Listen for clicks outside any block to switch back to render mode
     document.addEventListener("mousedown", (event) => {
@@ -358,6 +360,47 @@ class BlockManager {
    * so the user can see the block exists and knows to click it.
    */
   async _buildRenderMode(blockEl, block) {
+    blockEl.draggable = true;
+    blockEl.addEventListener("dragstart", (event) => {
+      this.draggedBlockId = block.id;
+      this.suppressNextRenderClick = true;
+      blockEl.classList.add("dragging");
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", block.id);
+    });
+    blockEl.addEventListener("dragover", (event) => {
+      if (!this.draggedBlockId || this.draggedBlockId === block.id) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      const midpoint =
+        blockEl.getBoundingClientRect().top + blockEl.offsetHeight / 2;
+      blockEl.classList.toggle("drag-over-top", event.clientY < midpoint);
+      blockEl.classList.toggle("drag-over-bottom", event.clientY >= midpoint);
+    });
+    blockEl.addEventListener("dragleave", (event) => {
+      if (!blockEl.contains(event.relatedTarget)) {
+        blockEl.classList.remove("drag-over-top", "drag-over-bottom");
+      }
+    });
+    blockEl.addEventListener("drop", (event) => {
+      event.preventDefault();
+      if (!this.draggedBlockId || this.draggedBlockId === block.id) return;
+      const midpoint =
+        blockEl.getBoundingClientRect().top + blockEl.offsetHeight / 2;
+      const targetIndex = this.blocks.findIndex((item) => item.id === block.id);
+      this._moveBlock(
+        this.draggedBlockId,
+        event.clientY < midpoint ? targetIndex : targetIndex + 1,
+      );
+      this._clearDragState();
+    });
+    blockEl.addEventListener("dragend", () => {
+      this._clearDragState();
+      setTimeout(() => {
+        this.suppressNextRenderClick = false;
+      }, 0);
+    });
+
     const renderedDiv = document.createElement("div");
     renderedDiv.className = "block-rendered";
 
@@ -400,6 +443,10 @@ class BlockManager {
         return;
       }
 
+      if (this.suppressNextRenderClick) {
+        this.suppressNextRenderClick = false;
+        return;
+      }
       this.editBlock(block.id);
     });
 
@@ -422,6 +469,34 @@ class BlockManager {
       this.removeBlock(block.id);
     });
     blockEl.appendChild(deleteBtn);
+  }
+
+  _moveBlock(id, insertIndex) {
+    const currentIndex = this.blocks.findIndex((block) => block.id === id);
+    if (currentIndex === -1) return;
+    const [block] = this.blocks.splice(currentIndex, 1);
+    const adjustedIndex =
+      insertIndex > currentIndex ? insertIndex - 1 : insertIndex;
+    this.blocks.splice(
+      Math.max(0, Math.min(adjustedIndex, this.blocks.length)),
+      0,
+      block,
+    );
+    this._renderAllBlocks();
+    this._notifyChange();
+  }
+
+  _clearDragState() {
+    this.draggedBlockId = null;
+    this.container
+      .querySelectorAll(".dragging, .drag-over-top, .drag-over-bottom")
+      .forEach((element) =>
+        element.classList.remove(
+          "dragging",
+          "drag-over-top",
+          "drag-over-bottom",
+        ),
+      );
   }
 
   /**
