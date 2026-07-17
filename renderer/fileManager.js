@@ -44,7 +44,7 @@ class FileManager {
     this._updateUI();
 
     // Create default content: one block with an h1, in render mode
-    this.blockManager.deserialize("# New document");
+    await this.blockManager.deserialize("# New document");
 
     // Add an empty block in edit mode
     await this.blockManager.addBlock();
@@ -75,7 +75,7 @@ class FileManager {
       this._updateUI();
 
       // Load the file content into blocks
-      this.blockManager.deserialize(result.content);
+      await this.blockManager.deserialize(result.content);
     } catch (error) {
       console.error("Failed to open file:", error);
       alert("Failed to open file. See console for details.");
@@ -129,7 +129,7 @@ class FileManager {
       if (this.currentFilePath) {
         await this.saveFile();
       }
-      console.log("Autosaved at", new Date().toLocaleTimeString());
+      // console.log("Autosaved at", new Date().toLocaleTimeString());
     }
   }
 

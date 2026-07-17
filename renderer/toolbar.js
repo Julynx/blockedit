@@ -701,7 +701,7 @@ class Toolbar {
       // This keeps auto-resizing, dirty-state tracking, and autosave working.
       textarea.dispatchEvent(new Event("input", { bubbles: true }));
 
-      textarea.focus();
+      textarea.focus({ preventScroll: true });
       textarea.setSelectionRange(textarea.value.length, textarea.value.length);
       return true;
     } catch (error) {
@@ -961,6 +961,8 @@ class Toolbar {
       const result = await window.api.chooseImageFile();
       if (result && result.filePath) {
         input.value = result.filePath;
+        submit();
+        return;
       }
       input.focus();
     });

@@ -14,6 +14,7 @@ class BlockManager {
     this.selectionStartedInsideBlock = false;
     this.draggedBlockId = null;
     this.suppressNextRenderClick = false;
+    this.mutationQueue = Promise.resolve();
 
     // Listen for clicks outside any block to switch back to render mode
     document.addEventListener("mousedown", (event) => {
@@ -30,13 +31,28 @@ class BlockManager {
    * @param {number} index - Position to insert at (defaults to end)
    * @param {string} content - Initial markdown content
    * @param {boolean} autoEdit - Whether to immediately enter edit mode
-   * @returns {Object} The created block data
+   * @returns {Promise<Object>} The created block data after the mutation queue
+   * completes
    */
-  async addBlock(index = this.blocks.length, content = "", autoEdit = true) {
-    // Commit the active editor before rebuilding the block list. Its text is
-    // still held by the textarea until renderBlock copies it into block.content.
+  addBlock(index = this.blocks.length, content = "", autoEdit = true) {
+    return this._enqueueMutation(() =>
+      this._addBlock(index, content, autoEdit),
+    );
+  }
+
+  addBlockRelative(blockId, offset, content = "", autoEdit = true) {
+    return this._enqueueMutation(() => {
+      const index = this.blocks.findIndex((block) => block.id === blockId);
+      if (index === -1) return null;
+      return this._addBlock(index + offset, content, autoEdit);
+    });
+  }
+
+  async _addBlock(index, content, autoEdit) {
+    // Commit the active editor before inserting the new block. Its text is
+    // still held by the textarea until rendering copies it into block.content.
     if (this.activeEditBlock) {
-      await this.renderBlock(this.activeEditBlock.id);
+      await this._renderBlockAndNotify(this.activeEditBlock.id);
     }
 
     const blockData = {
@@ -48,11 +64,12 @@ class BlockManager {
       renderedDiv: null, // Reference to rendered div
     };
 
-    this.blocks.splice(index, 0, blockData);
-    this._renderAllBlocks();
+    this.blocks.splice(Math.max(0, Math.min(index, this.blocks.length)), 0, blockData);
+    await this._renderBlock(blockData);
+    this._notifyChange();
 
     if (autoEdit) {
-      this.editBlock(blockData.id);
+      await this._editBlock(blockData.id);
     }
 
     return blockData;
@@ -63,6 +80,10 @@ class BlockManager {
    * @param {string} id
    */
   removeBlock(id) {
+    return this._enqueueMutation(() => this._removeBlock(id));
+  }
+
+  async _removeBlock(id) {
     const index = this.blocks.findIndex((b) => b.id === id);
     if (index === -1) return;
 
@@ -88,11 +109,11 @@ class BlockManager {
       });
     }
 
-    this._renderAllBlocks();
+    await this._renderAllBlocks();
     this._notifyChange();
 
     if (createdReplacement) {
-      this.editBlock(this.blocks[0].id);
+      await this._editBlock(this.blocks[0].id);
     }
   }
 
@@ -100,35 +121,49 @@ class BlockManager {
    * Switches a block to edit mode.
    * @param {string} id
    */
-  async editBlock(id) {
+  editBlock(id) {
+    return this._enqueueMutation(() => this._editBlock(id));
+  }
+
+  async _editBlock(id) {
     const block = this.blocks.find((b) => b.id === id);
     if (!block || block.mode === "edit") return;
 
     // First, render the currently edited block (if any)
     if (this.activeEditBlock) {
-      await this.renderBlock(this.activeEditBlock.id);
+      await this._renderBlockAndNotify(this.activeEditBlock.id);
     }
 
     block.mode = "edit";
     this.activeEditBlock = block;
-    this._renderBlock(block);
+    await this._renderBlock(block);
 
     // Focus the textarea and auto-resize it
     if (block.textarea) {
-      block.textarea.focus();
+      block.textarea.focus({ preventScroll: true });
       this._autoResizeTextarea(block.textarea);
     }
 
-    // Keep edit-mode popups below the block visible when editing near the
-    // bottom of the viewport.
-    this._centerBlockIfBelowViewport(block.element);
+    // Auto-centering is temporarily disabled while investigating scrolling
+    // issues with documents containing very tall rendered images.
+    // this._centerBlockIfBelowViewport(block.element);
   }
 
   /**
    * Switches a block to render mode (compiles markdown to HTML).
    * @param {string} id
    */
-  async renderBlock(id) {
+  renderBlock(id) {
+    return this._enqueueMutation(() => this._renderBlockAndNotify(id));
+  }
+
+  async _renderBlockAndNotify(id) {
+    const rendered = await this._renderBlockContent(id);
+    if (rendered) this._notifyChange();
+    return rendered;
+  }
+
+  async _renderBlockContent(id) {
     const block = this.blocks.find((b) => b.id === id);
     if (!block || block.mode === "render") return;
 
@@ -146,9 +181,7 @@ class BlockManager {
     }
 
     await this._renderBlock(block);
-
-    // Notify that content changed (for autosave)
-    this._notifyChange();
+    return true;
   }
 
   /**
@@ -170,7 +203,7 @@ class BlockManager {
    * otherwise splits on blank lines.
    * @param {string} markdown
    */
-  deserialize(markdown) {
+  async deserialize(markdown) {
     this.blocks = [];
     this.activeEditBlock = null;
 
@@ -226,7 +259,7 @@ class BlockManager {
       });
     }
 
-    this._renderAllBlocks();
+    await this._renderAllBlocks();
   }
 
   /**
@@ -246,6 +279,14 @@ class BlockManager {
 
   // ===== Private Methods =====
 
+  _enqueueMutation(operation) {
+    const nextOperation = this.mutationQueue.then(operation);
+    this.mutationQueue = nextOperation.catch((error) => {
+      console.error("Block mutation failed:", error);
+    });
+    return nextOperation;
+  }
+
   /**
    * Generates a unique ID for a block.
    * Prefers the built-in crypto.randomUUID(); falls back to a
@@ -263,15 +304,20 @@ class BlockManager {
   /**
    * Re-renders all blocks in the container.
    */
-  _renderAllBlocks() {
+  async _renderAllBlocks() {
     this.container.innerHTML = "";
-    this.blocks.forEach((block) => this._renderBlock(block));
+    for (const block of this.blocks) {
+      await this._renderBlock(block);
+    }
   }
 
   /**
    * Renders a single block (creates its DOM element).
    */
   async _renderBlock(block) {
+    const renderToken = (block.renderToken || 0) + 1;
+    block.renderToken = renderToken;
+
     // Remove old element if it exists
     if (block.element && block.element.parentNode) {
       block.element.remove();
@@ -286,8 +332,12 @@ class BlockManager {
       blockEl.classList.add("editing");
       this._buildEditMode(blockEl, block);
     } else {
-      this._buildRenderMode(blockEl, block);
+      await this._buildRenderMode(blockEl, block);
     }
+
+    // A newer render may have started while markdown was being converted.
+    // Do not let this stale render replace the block's current DOM reference.
+    if (block.renderToken !== renderToken) return;
 
     // Add plus buttons (visible on hover via CSS)
     this._addPlusButtons(blockEl, block.id);
@@ -355,7 +405,8 @@ class BlockManager {
 
     // Focus and auto-resize
     setTimeout(() => {
-      textarea.focus();
+      // Temporarily disabled while investigating unexpected scroll behavior.
+      // textarea.focus();
       this._autoResizeTextarea(textarea);
     }, 0);
   }
@@ -420,7 +471,7 @@ class BlockManager {
       // Convert markdown to HTML using our modular converter
       try {
         const html = await window.markdownConverter.convert(block.content);
-        console.log(html);
+        // console.log(html);
         renderedDiv.innerHTML = html;
       } catch (error) {
         console.error("Failed to render markdown:", error);
@@ -478,6 +529,10 @@ class BlockManager {
   }
 
   _moveBlock(id, insertIndex) {
+    return this._enqueueMutation(() => this._moveBlockNow(id, insertIndex));
+  }
+
+  async _moveBlockNow(id, insertIndex) {
     const currentIndex = this.blocks.findIndex((block) => block.id === id);
     if (currentIndex === -1) return;
     const [block] = this.blocks.splice(currentIndex, 1);
@@ -488,7 +543,7 @@ class BlockManager {
       0,
       block,
     );
-    this._renderAllBlocks();
+    await this._renderAllBlocks();
     this._notifyChange();
   }
 
@@ -509,16 +564,15 @@ class BlockManager {
    * Adds plus buttons above and below the block for inserting new blocks.
    */
   _addPlusButtons(blockEl, blockId) {
-    const index = this.blocks.findIndex((b) => b.id === blockId);
-
     // Plus button above
     const plusTop = document.createElement("button");
     plusTop.className = "block-plus block-plus-top";
     plusTop.innerHTML = "+";
     plusTop.title = "Insert block above";
     plusTop.addEventListener("click", (e) => {
+      e.preventDefault();
       e.stopPropagation();
-      this.addBlock(index, "", true);
+      this.addBlockRelative(blockId, 0, "", true);
     });
     blockEl.appendChild(plusTop);
 
@@ -528,8 +582,9 @@ class BlockManager {
     plusBottom.innerHTML = "+";
     plusBottom.title = "Insert block below";
     plusBottom.addEventListener("click", (e) => {
+      e.preventDefault();
       e.stopPropagation();
-      this.addBlock(index + 1, "", true);
+      this.addBlockRelative(blockId, 1, "", true);
     });
     blockEl.appendChild(plusBottom);
   }
@@ -548,14 +603,28 @@ class BlockManager {
    * @param {HTMLElement} blockElement
    */
   _centerBlockIfBelowViewport(blockElement) {
-    if (
-      !blockElement ||
-      blockElement.getBoundingClientRect().top <= window.innerHeight / 2
-    ) {
+    /*
+    if (!blockElement) {
       return;
     }
 
-    blockElement.scrollIntoView({ behavior: "smooth", block: "center" });
+    const blockRect = blockElement.getBoundingClientRect();
+    if (blockRect.top <= window.innerHeight / 2) return;
+
+    // scrollIntoView() can align against the wrong edge when a preceding
+    // rendered image is taller than the viewport. Calculate the document
+    // position explicitly so inserting a block never jumps to page top.
+    const scroller = document.scrollingElement || document.documentElement;
+    const targetScrollTop =
+      scroller.scrollTop +
+      blockRect.top -
+      (window.innerHeight - blockRect.height) / 2;
+
+    scroller.scrollTo({
+      top: Math.max(0, targetScrollTop),
+      behavior: "smooth",
+    });
+    */
   }
 
   /**

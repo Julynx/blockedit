@@ -62,5 +62,5 @@ document.addEventListener("DOMContentLoaded", () => {
     fileManager,
   };
 
-  console.log("Markdown Blocks initialized");
+  // console.log("Markdown Blocks initialized");
 });
