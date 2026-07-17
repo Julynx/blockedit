@@ -1,5 +1,5 @@
-// fileManager.js - File Operations & Autosave
-// Handles opening, saving, and creating new files, plus autosave logic.
+// fileManager.js - File Operations & Committed History
+// Handles opening, saving, and creating new files, plus committed history.
 // Communicates with the main process via the secure API exposed in preload.js.
 
 const MAX_HISTORY_BYTES = 256 * 1024 * 1024;
@@ -12,8 +12,6 @@ class FileManager {
     this.blockManager = blockManager;
     this.currentFilePath = null; // Path of the currently open file
     this.isDirty = false; // Whether there are unsaved changes
-    this.autosaveTimer = null; // Timer for debounced autosave
-    this.AUTOSAVE_DELAY = 1000; // 1 second of inactivity triggers save
     this.historyBase = null;
     this.history = [];
     this.historyIndex = 0;
@@ -21,6 +19,7 @@ class FileManager {
     this.historyMutationQueue = Promise.resolve();
     this.historyRestorePendingSave = false;
     this.savePromise = null;
+    this.commitQueue = Promise.resolve();
 
     // UI elements
     this.fileNameEl = document.getElementById("file-name");
@@ -31,8 +30,8 @@ class FileManager {
       this._setStatus(event.detail.message, event.detail.isError);
     });
 
-    // Register for block changes to trigger autosave
-    this.blockManager.onChange(() => this._onContentChange());
+    // Register for block edits and committed document changes.
+    this.blockManager.onChange((change) => this._onContentChange(change));
 
     // Wire up header buttons
     this._setupEventListeners();
@@ -46,7 +45,8 @@ class FileManager {
     const shouldProceed = await this._checkUnsavedChanges();
     if (!shouldProceed) return;
     await this.historyMutationQueue;
-    this._clearAutosaveTimer();
+    await this.commitQueue;
+    await this.blockManager.whenIdle();
     await window.api.clearCurrentFilePath();
 
     this.currentFilePath = null;
@@ -71,7 +71,8 @@ class FileManager {
     const shouldProceed = await this._checkUnsavedChanges();
     if (!shouldProceed) return;
     await this.historyMutationQueue;
-    this._clearAutosaveTimer();
+    await this.commitQueue;
+    await this.blockManager.whenIdle();
 
     try {
       const result = await window.api.openFile();
@@ -81,6 +82,9 @@ class FileManager {
         this._setStatus("Could not open file", true);
         return;
       }
+
+      await this.blockManager.whenIdle();
+      await this.commitQueue;
 
       this.currentFilePath = result.filePath;
       this.isDirty = false;
@@ -115,67 +119,21 @@ class FileManager {
   }
 
   async _saveFile() {
-    this._clearAutosaveTimer();
-    this._setStatus("Saving...");
-
     try {
+      await this.commitQueue;
+      await this.historyMutationQueue;
+      await this.blockManager.whenIdle();
       await this.blockManager.flushActiveEdit();
+      await this.blockManager.whenIdle();
       const content = this.blockManager.serialize();
-      const result = await window.api.saveFile({
-        filePath: this.currentFilePath,
-        content: content,
-      });
-
-      if (result.canceled) {
-        this._clearStatus();
-        return false;
+      if (!this.historyRestorePendingSave) {
+        this._recordCheckpoint(content);
       }
-
-      if (result.error) {
-        this._setStatus("Save failed", true);
-        return false;
-      }
-
-      if (result.success) {
-        if (!this.historyRestorePendingSave) {
-          this._recordCheckpoint(content);
-        }
-        this.currentFilePath = result.filePath;
-        const contentIsCurrent = this.blockManager.serialize() === content;
-        this.isDirty = !contentIsCurrent;
-        if (contentIsCurrent) {
-          this.historyRestorePendingSave = false;
-          this._setStatus("Saved");
-        } else {
-          this._scheduleAutosave();
-        }
-        this._updateUI();
-        return true;
-      }
-
-      this._setStatus("Save failed", true);
-      return false;
+      return await this._persistContent(content, true);
     } catch (error) {
       console.error("Failed to save file:", error);
       this._setStatus("Save failed", true);
       return false;
-    }
-  }
-
-  /**
-   * Creates an in-memory history checkpoint and writes to disk when the file
-   * has a path. New files still receive undo/redo checkpoints before saving.
-   */
-  async autosave() {
-    if (this.isDirty) {
-      if (!this.historyRestorePendingSave) {
-        this._recordCheckpoint(this.blockManager.serialize());
-      }
-      if (this.currentFilePath) {
-        await this.saveFile();
-      } else {
-        this.historyRestorePendingSave = false;
-      }
     }
   }
 
@@ -189,8 +147,9 @@ class FileManager {
   async handleCloseRequest() {
     if (this.savePromise) await this.savePromise;
     await this.historyMutationQueue;
+    await this.commitQueue;
+    await this.blockManager.whenIdle();
     const shouldClose = await this._checkUnsavedChanges();
-    if (shouldClose) this._clearAutosaveTimer();
     await window.api.respondToClose(shouldClose ? "close" : "cancel");
   }
 
@@ -227,10 +186,10 @@ class FileManager {
   }
 
   /**
-   * Called whenever block content changes.
-   * Marks the file as dirty and schedules an autosave.
+   * Called whenever block content changes. Typing only marks the document
+   * dirty; committed changes also enter the history and persistence queue.
    */
-  _onContentChange() {
+  _onContentChange(change = { type: "edit" }) {
     // A new edit starts a new history branch after undo/redo restoration.
     this.historyRestorePendingSave = false;
     if (this.saveStatusEl.classList.contains("error")) {
@@ -239,23 +198,59 @@ class FileManager {
     this.isDirty = true;
     this._updateUI();
 
-    this._scheduleAutosave();
-  }
-
-  _scheduleAutosave() {
-    this._clearAutosaveTimer();
-
-    this.autosaveTimer = setTimeout(() => {
-      this.autosaveTimer = null;
-      void this.autosave();
-    }, this.AUTOSAVE_DELAY);
-  }
-
-  _clearAutosaveTimer() {
-    if (this.autosaveTimer) {
-      clearTimeout(this.autosaveTimer);
-      this.autosaveTimer = null;
+    if (change.type === "commit") {
+      this._queueCommit(change.content, change.previousContent);
     }
+  }
+
+  _queueCommit(content, previousContent = null) {
+    this._queuePersistence(() => {
+      if (!this.historyRestorePendingSave) {
+        if (previousContent !== null) {
+          this._recordCheckpoint(previousContent);
+        }
+        this._recordCheckpoint(content);
+      }
+      return this._persistContent(content);
+    });
+  }
+
+  _queuePersistence(operation) {
+    const nextOperation = this.commitQueue.then(operation);
+    this.commitQueue = nextOperation.catch((error) => {
+      console.error("Committed change failed:", error);
+      this._setStatus("Save failed", true);
+    });
+    return nextOperation;
+  }
+
+  async _persistContent(content, allowSaveDialog = false) {
+    if (!this.currentFilePath && !allowSaveDialog) return true;
+
+    this._setStatus("Saving...");
+    const result = await window.api.saveFile({
+      filePath: this.currentFilePath,
+      content,
+    });
+
+    if (result.canceled) {
+      this._clearStatus();
+      return false;
+    }
+    if (result.error || !result.success) {
+      this._setStatus("Save failed", true);
+      return false;
+    }
+
+    this.currentFilePath = result.filePath;
+    const contentIsCurrent = this.blockManager.serialize() === content;
+    this.isDirty = !contentIsCurrent;
+    if (contentIsCurrent) {
+      this.historyRestorePendingSave = false;
+      this._setStatus("Saved");
+    }
+    this._updateUI();
+    return true;
   }
 
   _setStatus(message, isError = false) {
@@ -384,13 +379,14 @@ class FileManager {
   async _loadHistory(index) {
     await this.blockManager.deserialize(this._contentAt(index));
     this.historyIndex = index;
-    // Deserialization intentionally does not notify the change listener, so
-    // history restoration must schedule persistence explicitly. It does not
-    // create a new checkpoint, which keeps undo/redo from recording itself.
+    // Deserialization intentionally does not notify the change listener.
+    // Restore persistence does not create a new checkpoint.
     this.historyRestorePendingSave = true;
     this.isDirty = true;
     this._updateUI();
-    this._scheduleAutosave();
+    await this._queuePersistence(() =>
+      this._persistContent(this.blockManager.serialize()),
+    );
   }
 
   undo() {

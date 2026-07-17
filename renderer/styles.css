@@ -484,7 +484,6 @@ body {
   background-color: var(--accent-color);
   color: white;
   border-color: var(--accent-color);
-  transform: translateX(-50%) scale(1.1);
 }
 
 .block-plus-top {

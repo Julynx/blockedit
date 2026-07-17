@@ -698,7 +698,7 @@ class Toolbar {
 
       textarea.value = result.content;
 
-      // This keeps auto-resizing, dirty-state tracking, and autosave working.
+      // This keeps auto-resizing and dirty-state tracking working.
       textarea.dispatchEvent(new Event("input", { bubbles: true }));
 
       textarea.focus({ preventScroll: true });

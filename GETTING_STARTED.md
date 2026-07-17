@@ -264,7 +264,7 @@ blockedit/
     ├── app.js               # Entry point: wires everything together
     ├── blockManager.js      # Block creation, editing, rendering
     ├── markdownConverter.js # Markdown → sanitized HTML
-    ├── fileManager.js       # File open/save/new, autosave
+    ├── fileManager.js       # File open/save/new, committed history
     └── toolbar.js           # Markdown formatting and insertion buttons
 ```
 
@@ -278,16 +278,16 @@ blockedit/
 
 <section data-block-id="block-1514156f-5475-4972-8405-d738bb2d1a8f">
 
-| Module | What It Does |
-|--------|-------------|
-| **`main.js`** | Runs in Node.js. Creates the app window, handles file dialogs, reads/writes files on disk. Exposes IPC handlers that the renderer can call. |
-| **`preload.js`** | Runs before the page loads. Creates a secure bridge (`window.api`) so the renderer can ask the main process to do file operations or open web links without direct access to Node.js. |
-| **`app.js`** | Runs when the page loads. Creates instances of `BlockManager` and `FileManager`, wires them together. |
-| **`blockManager.js`** | Core logic for blocks. Handles:<br>• Creating/removing blocks<br>• Switching between edit mode (textarea) and render mode (HTML)<br>• Hover UI (shadow, plus buttons)<br>• Serializing blocks to markdown and parsing them back |
+| Module                     | What It Does                                                                                                                                                                                                                                                                               |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`main.js`**              | Runs in Node.js. Creates the app window, handles file dialogs, reads/writes files on disk. Exposes IPC handlers that the renderer can call.                                                                                                                                                |
+| **`preload.js`**           | Runs before the page loads. Creates a secure bridge (`window.api`) so the renderer can ask the main process to do file operations or open web links without direct access to Node.js.                                                                                                      |
+| **`app.js`**               | Runs when the page loads. Creates instances of `BlockManager` and `FileManager`, wires them together.                                                                                                                                                                                      |
+| **`blockManager.js`**      | Core logic for blocks. Handles:<br>• Creating/removing blocks<br>• Switching between edit mode (textarea) and render mode (HTML)<br>• Hover UI (shadow, plus buttons)<br>• Serializing blocks to markdown and parsing them back                                                            |
 | **`markdownConverter.js`** | Single responsibility: converts Markdown to **sanitized** HTML.<br>Uses `marked` for conversion, Highlight.js for fenced-code syntax highlighting, and `DOMPurify` for sanitization (required — `marked` does not sanitize, and raw HTML could otherwise execute scripts inside Electron). |
-| **`fileManager.js`** | Handles file operations:<br>• New / Open / Save buttons<br>• Autosave (1 second after you stop typing)<br>• Close and unsaved-changes prompts<br>• Save status and errors<br>• Tracks the current file path and dirty state |
-| **`toolbar.js`** | Creates the formatting toolbar under each block in edit mode.<br>Includes SVG-backed formatting buttons and the Google Docs-style grid popup for inserting tables. |
-| **`styles.css`** | All visual styling. Uses CSS variables for easy theming. No frameworks — everything is hand-written and readable. |
+| **`fileManager.js`**       | Handles file operations:<br>• New / Open / Save buttons<br>• Commit-time persistence<br>• Close and unsaved-changes prompts<br>• Save status and errors<br>• Tracks the current file path and dirty state                                                                                  |
+| **`toolbar.js`**           | Creates the formatting toolbar under each block in edit mode.<br>Includes SVG-backed formatting buttons and the Google Docs-style grid popup for inserting tables.                                                                                                                         |
+| **`styles.css`**           | All visual styling. Uses CSS variables for easy theming. No frameworks — everything is hand-written and readable.                                                                                                                                                                          |
 
 </section>
 
@@ -371,9 +371,9 @@ When you type in a block:
 <section data-block-id="block-45e11242-c5aa-4a2d-aef3-1a338cc0bd98">
 
 1. `blockManager.js` captures the input event
-2. It calls `_notifyChange()` which triggers `fileManager.js`'s autosave timer
-3. After 1 second of no typing, `fileManager.autosave()` runs
-4. It calls `blockManager.serialize()` to get markdown text
+2. It marks the document dirty while the block remains in edit mode
+3. Clicking outside the block formats and commits the block
+4. The commit creates a history checkpoint and calls `blockManager.serialize()`
 5. It calls `window.api.saveFile()` (from `preload.js`)
 6. `preload.js` sends an IPC message to `main.js`
 7. `main.js` writes the file atomically using Node.js `fs`

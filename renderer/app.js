@@ -58,7 +58,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize the BlockManager: handles all block lifecycle
   const blockManager = new BlockManager(blocksContainer);
 
-  // Initialize the FileManager: handles file I/O and autosave
+  // Initialize the FileManager: handles file I/O and committed history
   const fileManager = new FileManager(blockManager);
   window.api.onCloseRequested(() =>
     fileManager.handleCloseRequest().catch((error) => {
@@ -68,6 +68,19 @@ document.addEventListener("DOMContentLoaded", () => {
   );
 
   // Start with a new file (which creates a default "New document" block)
-  fileManager.newFile();
-
+  const startupControls = [
+    "btn-new",
+    "btn-open",
+    "btn-save",
+    "undo-btn",
+    "redo-btn",
+  ].map((id) => document.getElementById(id));
+  startupControls.forEach((control) => {
+    control.disabled = true;
+  });
+  fileManager.newFile().finally(() => {
+    startupControls.forEach((control) => {
+      control.disabled = false;
+    });
+  });
 });

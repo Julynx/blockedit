@@ -65,9 +65,13 @@ class BlockManager {
       renderedDiv: null, // Reference to rendered div
     };
 
-    this.blocks.splice(Math.max(0, Math.min(index, this.blocks.length)), 0, blockData);
+    this.blocks.splice(
+      Math.max(0, Math.min(index, this.blocks.length)),
+      0,
+      blockData,
+    );
     await this._renderBlock(blockData);
-    this._notifyChange();
+    this._notifyChange("commit", "create-block");
 
     if (autoEdit) {
       await this._editBlock(blockData.id);
@@ -87,6 +91,15 @@ class BlockManager {
   async _removeBlock(id) {
     const index = this.blocks.findIndex((b) => b.id === id);
     if (index === -1) return;
+
+    let previousContent = null;
+    const removedBlock = this.blocks[index];
+    if (this.activeEditBlock && this.activeEditBlock.id === id) {
+      // Preserve uncommitted text so Undo can restore exactly what was deleted.
+      removedBlock.content =
+        removedBlock.textarea?.value ?? removedBlock.content;
+      previousContent = this.serialize();
+    }
 
     // If we're removing the block being edited, clear that reference
     if (this.activeEditBlock && this.activeEditBlock.id === id) {
@@ -111,7 +124,7 @@ class BlockManager {
     }
 
     await this._renderAllBlocks();
-    this._notifyChange();
+    this._notifyChange("commit", "delete-block", previousContent);
 
     if (createdReplacement) {
       await this._editBlock(this.blocks[0].id);
@@ -144,7 +157,6 @@ class BlockManager {
       block.textarea.focus({ preventScroll: true });
       this._autoResizeTextarea(block.textarea);
     }
-
   }
 
   /**
@@ -161,8 +173,11 @@ class BlockManager {
   }
 
   async _renderBlockAndNotify(id) {
+    const generation = this.documentGeneration;
     const rendered = await this._renderBlockContent(id);
-    if (rendered) this._notifyChange();
+    if (rendered && generation === this.documentGeneration) {
+      this._notifyChange("commit", "render");
+    }
     return rendered;
   }
 
@@ -172,6 +187,15 @@ class BlockManager {
 
     // Save the current textarea content back to the block data
     if (block.textarea) {
+      if (block.textarea.value === block.content) {
+        block.mode = "render";
+        if (this.activeEditBlock && this.activeEditBlock.id === id) {
+          this.activeEditBlock = null;
+        }
+        await this._renderBlock(block);
+        return false;
+      }
+
       // Format before compiling so the rendered HTML reflects the formatted
       // Markdown and the saved block uses the same normalized content.
       await this.toolbar.formatMarkdown(block.textarea);
@@ -210,7 +234,11 @@ class BlockManager {
    * otherwise splits on blank lines.
    * @param {string} markdown
    */
-  async deserialize(markdown) {
+  deserialize(markdown) {
+    return this._enqueueMutation(() => this._deserialize(markdown));
+  }
+
+  async _deserialize(markdown) {
     const generation = ++this.documentGeneration;
     this.blocks = [];
     this.activeEditBlock = null;
@@ -238,14 +266,15 @@ class BlockManager {
         });
       });
     } else {
-      // Plain markdown: split on blank lines (allowing trailing whitespace on the blank line)
-      const rawBlocks = normalized.split(/\n[ \t]*\n+/);
-      rawBlocks.forEach((raw) => {
-        const content = raw.trim();
+      // Plain Markdown: blank lines split blocks unless they are inside a
+      // fenced code block. Keep fenced code together even when it contains
+      // multiple blank lines.
+      const rawBlocks = this._splitPlainMarkdownIntoBlocks(normalized);
+      rawBlocks.forEach((content) => {
         if (content) {
           this.blocks.push({
             id: this._generateId(),
-            content: content,
+            content,
             mode: "render",
             element: null,
             textarea: null,
@@ -270,9 +299,46 @@ class BlockManager {
     await this._renderAllBlocks(generation);
   }
 
+  _splitPlainMarkdownIntoBlocks(markdown) {
+    const blocks = [];
+    const lines = markdown.split("\n");
+    let insideFencedCode = false;
+    let currentBlock = [];
+
+    const finishBlock = () => {
+      const content = currentBlock.join("\n").trim();
+      if (content) blocks.push(content);
+      currentBlock = [];
+    };
+
+    for (const line of lines) {
+      const isFenceMarker = /^\s*```/.test(line);
+      const isEmptyLine = /^\s*$/.test(line);
+
+      if (isFenceMarker) {
+        currentBlock.push(line);
+        insideFencedCode = !insideFencedCode;
+        continue;
+      }
+
+      if (isEmptyLine && !insideFencedCode) {
+        finishBlock();
+        continue;
+      }
+
+      currentBlock.push(line);
+    }
+
+    finishBlock();
+    return blocks;
+  }
+
+  whenIdle() {
+    return this.mutationQueue;
+  }
+
   /**
-   * Registers a callback to be notified when any block content changes.
-   * Used by FileManager for autosave.
+   * Registers a callback for edit and committed document changes.
    */
   onChange(callback) {
     this._changeCallback = callback;
@@ -381,7 +447,7 @@ class BlockManager {
     // Auto-resize as user types
     textarea.addEventListener("input", () => {
       this._autoResizeTextarea(textarea);
-      this._notifyChange();
+      this._notifyChange("edit");
     });
 
     // Keyboard handling inside the editor:
@@ -579,7 +645,7 @@ class BlockManager {
       block,
     );
     await this._renderAllBlocks();
-    this._notifyChange();
+    this._notifyChange("commit", "move-block");
   }
 
   _clearDragState() {
@@ -657,11 +723,16 @@ class BlockManager {
   }
 
   /**
-   * Notifies the change callback (used for autosave).
+   * Notifies the change callback with a captured committed document snapshot.
    */
-  _notifyChange() {
+  _notifyChange(type = "edit", reason = type, previousContent = null) {
     if (this._changeCallback) {
-      this._changeCallback();
+      this._changeCallback({
+        type,
+        reason,
+        content: type === "commit" ? this.serialize() : null,
+        previousContent,
+      });
     }
   }
 }
