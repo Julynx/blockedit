@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("api", {
   openFile: () => ipcRenderer.invoke("file:open"),
   chooseImageFile: () => ipcRenderer.invoke("file:choose-image"),
   saveFile: (data) => ipcRenderer.invoke("file:save", data),
+  clearCurrentFilePath: () => ipcRenderer.invoke("file:clear-current-path"),
   openExternalLink: (url) => ipcRenderer.invoke("link:open-external", url),
 
   // Markdown formatting
@@ -21,12 +22,16 @@ contextBridge.exposeInMainWorld("api", {
 
   // Dialogs
   showUnsavedChangesDialog: () => ipcRenderer.invoke("dialog:unsaved-changes"),
+  onCloseRequested: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("app:close-requested", listener);
+    return () => ipcRenderer.removeListener("app:close-requested", listener);
+  },
+  respondToClose: (decision) => ipcRenderer.invoke("app:close-response", decision),
 
   // Page zoom
   getZoom: () => ipcRenderer.invoke("zoom:get"),
   setZoom: (zoom) => ipcRenderer.invoke("zoom:set", zoom),
   changeZoom: (direction) => ipcRenderer.invoke("zoom:change", direction),
 
-  // Utility: get current file path (if we expand main to track it later)
-  getCurrentFilePath: () => ipcRenderer.invoke("file:get-current-path"),
 });

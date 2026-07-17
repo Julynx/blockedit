@@ -72,7 +72,7 @@ class Toolbar {
     const fencedCodeBtn = this._createIconButton(
       "fenced-code",
       "Code Block",
-      () => this._wrapSelection(textarea, "```\n", "\n```"),
+      () => this._wrapSelection(textarea, "```language\n", "\n```"),
     );
     const ruleBtn = this._createIconButton("horizontal-rule", "Separator", () =>
       this._insertHorizontalRule(textarea),
@@ -706,6 +706,11 @@ class Toolbar {
       return true;
     } catch (error) {
       console.error("Could not format Markdown:", error);
+      document.dispatchEvent(
+        new CustomEvent("editor-status", {
+          detail: { message: "Formatting failed", isError: true },
+        }),
+      );
       return false;
     } finally {
       if (button) {

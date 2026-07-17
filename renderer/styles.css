@@ -147,6 +147,16 @@ body {
   opacity: 1;
 }
 
+.save-status {
+  color: #666;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.save-status.error {
+  color: #b42318;
+}
+
 .header-controls {
   display: flex;
   gap: 8px;
@@ -286,6 +296,40 @@ body {
   padding: 0;
 }
 
+/* Highlight.js token colors, kept aligned with the light editor theme. */
+.block-rendered .hljs-comment,
+.block-rendered .hljs-quote {
+  color: #6a737d;
+}
+
+.block-rendered .hljs-keyword,
+.block-rendered .hljs-selector-tag,
+.block-rendered .hljs-built_in,
+.block-rendered .hljs-name,
+.block-rendered .hljs-type {
+  color: #8b2671;
+}
+
+.block-rendered .hljs-string,
+.block-rendered .hljs-title,
+.block-rendered .hljs-section,
+.block-rendered .hljs-attribute {
+  color: #0b6e4f;
+}
+
+.block-rendered .hljs-number,
+.block-rendered .hljs-literal,
+.block-rendered .hljs-variable,
+.block-rendered .hljs-template-variable {
+  color: #9a6700;
+}
+
+.block-rendered .hljs-meta,
+.block-rendered .hljs-regexp,
+.block-rendered .hljs-symbol {
+  color: #a04100;
+}
+
 .block-rendered table {
   border-collapse: collapse;
   margin: 0.5em 0;
@@ -353,24 +397,26 @@ body {
   position: absolute;
   top: 8px;
   right: 8px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background-color: var(--accent-color);
-  color: white;
-  border: none;
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  display: none; /* Only shown in edit mode */
   align-items: center;
   justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 5px;
+  border: none;
+  border-radius: 50%;
+  background: #ff9500;
+  cursor: pointer;
   z-index: 10;
-  transition: transform 0.1s;
+}
+
+.block-tick img {
+  width: 16px;
+  height: 16px;
+  transform: translate(0.75px, 1.5px);
 }
 
 .block-tick:hover {
-  transform: scale(1.1);
+  background-color: color-mix(in srgb, var(--accent-color) 70%, #ffffff 30%);
 }
 
 .block.editing .block-tick {
@@ -451,6 +497,12 @@ body {
 
 .block:hover .block-plus {
   display: flex;
+}
+
+/* The editing block owns the shared insertion control between two blocks. */
+.block:has(+ .block.editing) .block-plus-bottom,
+.block.editing + .block .block-plus-top {
+  display: none !important;
 }
 
 /* Toolbar that appears under a block in edit mode */

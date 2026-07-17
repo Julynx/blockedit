@@ -18,9 +18,79 @@ const prettier = require("prettier");
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 2;
 const ZOOM_STEP = 0.1;
+const MAX_FILE_BYTES = 64 * 1024 * 1024;
 
 // Keep a global reference to the window so it isn't garbage collected
 let mainWindow;
+let approvedFilePath = null;
+let closeRequestPending = false;
+let isClosing = false;
+
+function isMainWindowSender(event) {
+  return mainWindow && event.sender === mainWindow.webContents;
+}
+
+function pathsMatch(left, right) {
+  return left && right && path.resolve(left) === path.resolve(right);
+}
+
+async function writeFileAtomically(targetPath, content) {
+  const directory = path.dirname(targetPath);
+  const fileName = path.basename(targetPath);
+  const suffix = `${process.pid}-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2)}`;
+  const temporaryPath = path.join(directory, `.${fileName}.${suffix}.tmp`);
+  const backupPath = path.join(directory, `.${fileName}.${suffix}.bak`);
+  let handle;
+
+  try {
+    handle = await fs.open(temporaryPath, "w");
+    await handle.writeFile(content, "utf-8");
+    await handle.sync();
+  } catch (error) {
+    await fs.rm(temporaryPath, { force: true });
+    throw error;
+  } finally {
+    await handle?.close();
+  }
+
+  try {
+    // This is atomic on platforms that allow rename-overwrite.
+    await fs.rename(temporaryPath, targetPath);
+  } catch (error) {
+    if (![
+      "EEXIST",
+      "EPERM",
+      "ENOTEMPTY",
+    ].includes(error.code)) {
+      await fs.rm(temporaryPath, { force: true });
+      throw error;
+    }
+
+    // Windows does not replace an existing file with rename(). Keep a backup
+    // while replacing it so a failed second rename can restore the original.
+    let originalMoved = false;
+    try {
+      await fs.rename(targetPath, backupPath);
+      originalMoved = true;
+      await fs.rename(temporaryPath, targetPath);
+      await fs.rm(backupPath, { force: true });
+    } catch (replacementError) {
+      await fs.rm(temporaryPath, { force: true });
+      if (originalMoved) {
+        try {
+          await fs.rename(backupPath, targetPath);
+        } catch (restoreError) {
+          replacementError.message += ` Original file could not be restored: ${restoreError.message}`;
+        }
+      }
+      throw replacementError;
+    }
+  } finally {
+    await fs.rm(temporaryPath, { force: true });
+  }
+}
 
 /**
  * Creates the main application window and loads the renderer HTML.
@@ -45,8 +115,10 @@ function createWindow() {
   // Load the HTML file that contains our UI
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
 
-  // Open DevTools automatically in development (comment out for production)
-  mainWindow.webContents.openDevTools();
+  // Keep DevTools available during development without opening them in builds.
+  if (!app.isPackaged) {
+    mainWindow.webContents.openDevTools();
+  }
 
   // Remove the default menu bar (we're making our own simple UI)
   Menu.setApplicationMenu(null);
@@ -54,6 +126,17 @@ function createWindow() {
   // Clean up when window is closed
   mainWindow.on("closed", () => {
     mainWindow = null;
+    approvedFilePath = null;
+  });
+
+  mainWindow.on("close", (event) => {
+    if (isClosing) return;
+
+    event.preventDefault();
+    if (closeRequestPending) return;
+
+    closeRequestPending = true;
+    mainWindow.webContents.send("app:close-requested");
   });
 }
 
@@ -98,7 +181,12 @@ ipcMain.handle("file:open", async () => {
 
   const filePath = result.filePaths[0];
   try {
+    const fileInfo = await fs.stat(filePath);
+    if (fileInfo.size > MAX_FILE_BYTES) {
+      return { filePath, content: null, error: "File is too large" };
+    }
     const content = await fs.readFile(filePath, "utf-8");
+    approvedFilePath = filePath;
     return { filePath, content };
   } catch (error) {
     console.error("Failed to read file:", error);
@@ -158,10 +246,32 @@ ipcMain.handle("file:choose-image", async () => {
  * Saves content to the given file path.
  * If no path is provided, shows a save dialog.
  */
-ipcMain.handle("file:save", async (event, { filePath, content }) => {
+ipcMain.handle("file:save", async (event, data) => {
   if (!mainWindow) return { success: false, error: "No window" };
+  if (!isMainWindowSender(event)) {
+    return { success: false, error: "Unauthorized save request" };
+  }
+  if (!data || typeof data.content !== "string") {
+    return { success: false, error: "File content must be a string" };
+  }
+  if (Buffer.byteLength(data.content, "utf8") > MAX_FILE_BYTES) {
+    return { success: false, error: "File content is too large" };
+  }
+  if (
+    data.filePath !== undefined &&
+    data.filePath !== null &&
+    typeof data.filePath !== "string"
+  ) {
+    return { success: false, error: "File path must be a string" };
+  }
+
+  const { filePath, content } = data;
 
   let targetPath = filePath;
+
+  if (targetPath && !pathsMatch(targetPath, approvedFilePath)) {
+    return { success: false, error: "The requested file is not approved" };
+  }
 
   // If no path is known, ask the user where to save
   if (!targetPath) {
@@ -177,12 +287,31 @@ ipcMain.handle("file:save", async (event, { filePath, content }) => {
   }
 
   try {
-    await fs.writeFile(targetPath, content, "utf-8");
+    await writeFileAtomically(targetPath, content);
+    approvedFilePath = targetPath;
     return { success: true, filePath: targetPath };
   } catch (error) {
     console.error("Failed to save file:", error);
     return { success: false, error: error.message };
   }
+});
+
+ipcMain.handle("file:clear-current-path", (event) => {
+  if (!isMainWindowSender(event)) return false;
+  approvedFilePath = null;
+  return true;
+});
+
+ipcMain.handle("app:close-response", (event, decision) => {
+  if (!isMainWindowSender(event) || !closeRequestPending) return false;
+  if (!["close", "cancel"].includes(decision)) return false;
+
+  closeRequestPending = false;
+  if (decision === "close") {
+    isClosing = true;
+    mainWindow.close();
+  }
+  return true;
 });
 
 /**
@@ -237,16 +366,6 @@ ipcMain.handle("dialog:unsaved-changes", async () => {
 
   const responses = ["save", "dontsave", "cancel"];
   return responses[result.response];
-});
-
-/**
- * Gets the path of the currently opened file (if any).
- * This is mainly used to update the window title.
- */
-ipcMain.handle("file:get-current-path", () => {
-  // In a more complex app, you might track this in main.
-  // For now, the renderer tracks the path and just asks main to update the title.
-  return null;
 });
 
 /**

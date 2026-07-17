@@ -16,4 +16,4 @@ Hard
 
 Low priority
 
-- [ ] Syntax highlighting para codigo
+- [x] Syntax highlighting para codigo

@@ -22,12 +22,20 @@ document.addEventListener("DOMContentLoaded", () => {
     .addEventListener("click", () => changeZoom("in"));
 
   document.addEventListener("keydown", (event) => {
-    if (!event.ctrlKey) return;
+    if (!event.ctrlKey && !event.metaKey) return;
 
-    if (event.key.toLowerCase() === "z") {
+    const isTextareaTarget =
+      event.target instanceof HTMLTextAreaElement &&
+      document.activeElement === event.target;
+    const key = event.key.toLowerCase();
+
+    // Textareas retain the browser's native undo and redo behavior.
+    if (isTextareaTarget && (key === "z" || key === "y")) return;
+
+    if (key === "z" && !event.shiftKey) {
       event.preventDefault();
       fileManager.undo();
-    } else if (event.key.toLowerCase() === "y") {
+    } else if (key === "y" || (key === "z" && event.shiftKey)) {
       event.preventDefault();
       fileManager.redo();
     } else if (event.key === "+" || event.key === "=") {
@@ -52,15 +60,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initialize the FileManager: handles file I/O and autosave
   const fileManager = new FileManager(blockManager);
+  window.api.onCloseRequested(() =>
+    fileManager.handleCloseRequest().catch((error) => {
+      console.error("Close request failed:", error);
+      return window.api.respondToClose("cancel");
+    }),
+  );
 
   // Start with a new file (which creates a default "New document" block)
   fileManager.newFile();
 
-  // Expose to console for debugging (optional, helpful during development)
-  window.app = {
-    blockManager,
-    fileManager,
-  };
-
-  // console.log("Markdown Blocks initialized");
 });

@@ -1,6 +1,5 @@
 // markdownConverter.js - Modular Markdown to HTML Conversion
-// This module wraps the 'marked' library. It's designed to be easily swapped
-// for a remote API call later without changing any other code in the app.
+// This module wraps the local 'marked' library and sanitizes its HTML output.
 
 // Configure marked with safe, standard options.
 // (Note: headerIds/mangle were removed in modern marked versions, so we
@@ -12,6 +11,38 @@ if (typeof marked !== "undefined") {
   });
 }
 
+const codeRenderer =
+  typeof marked !== "undefined" ? new marked.Renderer() : null;
+
+if (codeRenderer) {
+  codeRenderer.code = (code, infostring, escaped) => {
+    const language = (infostring || "").trim().split(/\s+/, 1)[0];
+    const source = code.replace(/\n$/, "") + "\n";
+    let highlighted = escaped ? source : escapeHtml(source);
+
+    if (
+      language &&
+      language !== "language" &&
+      typeof hljs !== "undefined" &&
+      hljs.getLanguage(language)
+    ) {
+      try {
+        highlighted = hljs.highlight(source, {
+          language,
+          ignoreIllegals: true,
+        }).value;
+      } catch (error) {
+        console.warn(`Could not highlight ${language} code:`, error);
+      }
+    }
+
+    const languageClass = language
+      ? ` class="hljs language-${escapeHtml(language)}"`
+      : ' class="hljs"';
+    return `<pre><code${languageClass}>${highlighted}</code></pre>\n`;
+  };
+}
+
 /**
  * Converts a markdown string to sanitized HTML.
  *
@@ -20,22 +51,11 @@ if (typeof marked !== "undefined") {
  * Because this runs inside Electron — where the page has access to
  * window.api and therefore the file system — we MUST sanitize the HTML
  * with DOMPurify before it is injected into the DOM. Local images are stored
- * as data URLs so Chromium can resolve them from the file-backed app page.
+ * as file URLs so Chromium can resolve them without copying image bytes into
+ * the Markdown document.
  *
- * CURRENT IMPLEMENTATION: Uses the local `marked` library.
- * FUTURE IMPLEMENTATION: Replace the marked.parse() call with a fetch()
- * call to your own API endpoint, e.g.:
- *
- *   const response = await fetch('https://your-api.com/convert', {
- *     method: 'POST',
- *     headers: { 'Content-Type': 'application/json' },
- *     body: JSON.stringify({ markdown })
- *   });
- *   const html = await response.text();
- *   return sanitizeHtml(html); // keep sanitizing even with your own API
- *
- * The rest of the app (BlockManager, etc.) calls this function and
- * expects a Promise that resolves to an HTML string.
+ * The rest of the app calls this function and expects a Promise that resolves
+ * to a sanitized HTML string.
  *
  * @param {string} markdown - The markdown source text
  * @returns {Promise<string>} A promise resolving to sanitized HTML
@@ -48,9 +68,11 @@ async function convertMarkdownToHtml(markdown) {
   }
 
   try {
-    // marked.parse() is synchronous, but we wrap it in a Promise
-    // so the interface is async-ready for future API replacement.
-    const rawHtml = marked.parse(markdown);
+    // marked.parse() is synchronous, but this function remains async because
+    // rendering is part of an asynchronous block lifecycle.
+    const rawHtml = marked.parse(markdown, {
+      renderer: codeRenderer,
+    });
     return sanitizeHtml(rawHtml);
   } catch (error) {
     console.error("Markdown conversion error:", error);
@@ -63,7 +85,7 @@ async function convertMarkdownToHtml(markdown) {
  * other potentially dangerous markup while keeping normal formatting
  * (headings, tables, links, images, etc.).
  *
- * @param {string} html - Raw HTML (e.g. from marked or a remote API)
+ * @param {string} html - Raw HTML from marked
  * @returns {string} Sanitized HTML safe for innerHTML injection
  */
 function sanitizeHtml(html) {
@@ -78,12 +100,6 @@ function sanitizeHtml(html) {
     ALLOWED_URI_REGEXP: allowedUriPattern,
   });
 }
-
-DOMPurify.addHook("uponSanitizeAttribute", (node, data) => {
-  if (data.attrName === "type") {
-    data.forceKeepAttr = true;
-  }
-});
 
 /**
  * Escapes HTML special characters to prevent injection.

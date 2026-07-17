@@ -15,6 +15,7 @@ class BlockManager {
     this.draggedBlockId = null;
     this.suppressNextRenderClick = false;
     this.mutationQueue = Promise.resolve();
+    this.documentGeneration = 0;
 
     // Listen for clicks outside any block to switch back to render mode
     document.addEventListener("mousedown", (event) => {
@@ -144,9 +145,6 @@ class BlockManager {
       this._autoResizeTextarea(block.textarea);
     }
 
-    // Auto-centering is temporarily disabled while investigating scrolling
-    // issues with documents containing very tall rendered images.
-    // this._centerBlockIfBelowViewport(block.element);
   }
 
   /**
@@ -155,6 +153,11 @@ class BlockManager {
    */
   renderBlock(id) {
     return this._enqueueMutation(() => this._renderBlockAndNotify(id));
+  }
+
+  flushActiveEdit() {
+    if (!this.activeEditBlock) return Promise.resolve();
+    return this.renderBlock(this.activeEditBlock.id);
   }
 
   async _renderBlockAndNotify(id) {
@@ -192,7 +195,11 @@ class BlockManager {
   serialize() {
     return this.blocks
       .map((block) => {
-        return `<section data-block-id="${block.id}">\n\n${block.content}\n\n</section>`;
+        const content =
+          block === this.activeEditBlock && block.textarea
+            ? block.textarea.value
+            : block.content;
+        return `<section data-block-id="${block.id}">\n\n${content}\n\n</section>`;
       })
       .join("\n\n");
   }
@@ -204,6 +211,7 @@ class BlockManager {
    * @param {string} markdown
    */
   async deserialize(markdown) {
+    const generation = ++this.documentGeneration;
     this.blocks = [];
     this.activeEditBlock = null;
 
@@ -259,14 +267,7 @@ class BlockManager {
       });
     }
 
-    await this._renderAllBlocks();
-  }
-
-  /**
-   * Gets the total number of blocks.
-   */
-  getBlockCount() {
-    return this.blocks.length;
+    await this._renderAllBlocks(generation);
   }
 
   /**
@@ -304,9 +305,10 @@ class BlockManager {
   /**
    * Re-renders all blocks in the container.
    */
-  async _renderAllBlocks() {
+  async _renderAllBlocks(generation = this.documentGeneration) {
     this.container.innerHTML = "";
     for (const block of this.blocks) {
+      if (generation !== this.documentGeneration) return;
       await this._renderBlock(block);
     }
   }
@@ -315,6 +317,7 @@ class BlockManager {
    * Renders a single block (creates its DOM element).
    */
   async _renderBlock(block) {
+    const generation = this.documentGeneration;
     const renderToken = (block.renderToken || 0) + 1;
     block.renderToken = renderToken;
 
@@ -337,7 +340,12 @@ class BlockManager {
 
     // A newer render may have started while markdown was being converted.
     // Do not let this stale render replace the block's current DOM reference.
-    if (block.renderToken !== renderToken) return;
+    if (
+      generation !== this.documentGeneration ||
+      block.renderToken !== renderToken
+    ) {
+      return;
+    }
 
     // Add plus buttons (visible on hover via CSS)
     this._addPlusButtons(blockEl, block.id);
@@ -398,8 +406,13 @@ class BlockManager {
     // Tick button to confirm/render
     const tickBtn = document.createElement("button");
     tickBtn.className = "block-tick";
-    tickBtn.innerHTML = "✓";
+    tickBtn.type = "button";
     tickBtn.title = "Render (Shift+Enter)";
+    tickBtn.setAttribute("aria-label", "Render (Shift+Enter)");
+    const tickIcon = document.createElement("img");
+    tickIcon.src = "icons/check.svg";
+    tickIcon.alt = "";
+    tickBtn.appendChild(tickIcon);
     tickBtn.addEventListener("click", () => this.renderBlock(block.id));
     blockEl.appendChild(tickBtn);
 
@@ -475,6 +488,11 @@ class BlockManager {
         renderedDiv.innerHTML = html;
       } catch (error) {
         console.error("Failed to render markdown:", error);
+        document.dispatchEvent(
+          new CustomEvent("editor-status", {
+            detail: { message: "Rendering failed", isError: true },
+          }),
+        );
         renderedDiv.textContent = block.content;
       }
     }
@@ -492,11 +510,28 @@ class BlockManager {
         event.preventDefault();
         event.stopPropagation();
 
-        window.api.openExternalLink(link.href).then((result) => {
-          if (!result.success) {
-            console.warn("Link was not opened:", result.error);
-          }
-        });
+        window.api
+          .openExternalLink(link.href)
+          .then((result) => {
+            if (!result.success) {
+              console.warn("Link was not opened:", result.error);
+              document.dispatchEvent(
+                new CustomEvent("editor-status", {
+                  detail: {
+                    message: "Link could not be opened",
+                    isError: true,
+                  },
+                }),
+              );
+            }
+          })
+          .catch(() => {
+            document.dispatchEvent(
+              new CustomEvent("editor-status", {
+                detail: { message: "Link could not be opened", isError: true },
+              }),
+            );
+          });
         return;
       }
 
@@ -596,35 +631,6 @@ class BlockManager {
   _autoResizeTextarea(textarea) {
     textarea.style.height = "auto";
     textarea.style.height = textarea.scrollHeight + "px";
-  }
-
-  /**
-   * Centers a block when it starts below the middle of the viewport.
-   * @param {HTMLElement} blockElement
-   */
-  _centerBlockIfBelowViewport(blockElement) {
-    /*
-    if (!blockElement) {
-      return;
-    }
-
-    const blockRect = blockElement.getBoundingClientRect();
-    if (blockRect.top <= window.innerHeight / 2) return;
-
-    // scrollIntoView() can align against the wrong edge when a preceding
-    // rendered image is taller than the viewport. Calculate the document
-    // position explicitly so inserting a block never jumps to page top.
-    const scroller = document.scrollingElement || document.documentElement;
-    const targetScrollTop =
-      scroller.scrollTop +
-      blockRect.top -
-      (window.innerHeight - blockRect.height) / 2;
-
-    scroller.scrollTo({
-      top: Math.max(0, targetScrollTop),
-      behavior: "smooth",
-    });
-    */
   }
 
   /**

@@ -18,10 +18,18 @@ class FileManager {
     this.history = [];
     this.historyIndex = 0;
     this.historyBytes = 0;
+    this.historyMutationQueue = Promise.resolve();
+    this.historyRestorePendingSave = false;
+    this.savePromise = null;
 
     // UI elements
     this.fileNameEl = document.getElementById("file-name");
     this.dirtyIndicatorEl = document.getElementById("dirty-indicator");
+    this.saveStatusEl = document.getElementById("save-status");
+    this.saveStatusTimer = null;
+    document.addEventListener("editor-status", (event) => {
+      this._setStatus(event.detail.message, event.detail.isError);
+    });
 
     // Register for block changes to trigger autosave
     this.blockManager.onChange(() => this._onContentChange());
@@ -37,9 +45,13 @@ class FileManager {
   async newFile() {
     const shouldProceed = await this._checkUnsavedChanges();
     if (!shouldProceed) return;
+    await this.historyMutationQueue;
+    this._clearAutosaveTimer();
+    await window.api.clearCurrentFilePath();
 
     this.currentFilePath = null;
     this.isDirty = false;
+    this.historyRestorePendingSave = false;
     this._resetHistory();
     this._updateUI();
 
@@ -58,27 +70,31 @@ class FileManager {
   async openFile() {
     const shouldProceed = await this._checkUnsavedChanges();
     if (!shouldProceed) return;
+    await this.historyMutationQueue;
+    this._clearAutosaveTimer();
 
     try {
       const result = await window.api.openFile();
       if (!result) return; // User cancelled
 
       if (result.error) {
-        alert(`Error opening file: ${result.error}`);
+        this._setStatus("Could not open file", true);
         return;
       }
 
       this.currentFilePath = result.filePath;
       this.isDirty = false;
+      this.historyRestorePendingSave = false;
       this._resetHistory();
       this.historyBase = result.content;
       this._updateUI();
 
       // Load the file content into blocks
       await this.blockManager.deserialize(result.content);
+      this._setStatus("Opened");
     } catch (error) {
       console.error("Failed to open file:", error);
-      alert("Failed to open file. See console for details.");
+      this._setStatus("Could not open file", true);
     }
   }
 
@@ -87,34 +103,61 @@ class FileManager {
    * If no file path is known, shows a save dialog.
    * @returns {Promise<boolean>} True if saved successfully
    */
-  async saveFile() {
-    const content = this.blockManager.serialize();
+  saveFile() {
+    if (this.savePromise) return this.savePromise;
+
+    const savePromise = this._saveFile();
+    const wrappedPromise = savePromise.finally(() => {
+      if (this.savePromise === wrappedPromise) this.savePromise = null;
+    });
+    this.savePromise = wrappedPromise;
+    return wrappedPromise;
+  }
+
+  async _saveFile() {
+    this._clearAutosaveTimer();
+    this._setStatus("Saving...");
 
     try {
+      await this.blockManager.flushActiveEdit();
+      const content = this.blockManager.serialize();
       const result = await window.api.saveFile({
         filePath: this.currentFilePath,
         content: content,
       });
 
-      if (result.canceled) return false;
+      if (result.canceled) {
+        this._clearStatus();
+        return false;
+      }
 
       if (result.error) {
-        alert(`Error saving file: ${result.error}`);
+        this._setStatus("Save failed", true);
         return false;
       }
 
       if (result.success) {
-        this._recordCheckpoint(content);
+        if (!this.historyRestorePendingSave) {
+          this._recordCheckpoint(content);
+        }
         this.currentFilePath = result.filePath;
-        this.isDirty = false;
+        const contentIsCurrent = this.blockManager.serialize() === content;
+        this.isDirty = !contentIsCurrent;
+        if (contentIsCurrent) {
+          this.historyRestorePendingSave = false;
+          this._setStatus("Saved");
+        } else {
+          this._scheduleAutosave();
+        }
         this._updateUI();
         return true;
       }
 
+      this._setStatus("Save failed", true);
       return false;
     } catch (error) {
       console.error("Failed to save file:", error);
-      alert("Failed to save file. See console for details.");
+      this._setStatus("Save failed", true);
       return false;
     }
   }
@@ -125,19 +168,15 @@ class FileManager {
    */
   async autosave() {
     if (this.isDirty) {
-      this._recordCheckpoint(this.blockManager.serialize());
+      if (!this.historyRestorePendingSave) {
+        this._recordCheckpoint(this.blockManager.serialize());
+      }
       if (this.currentFilePath) {
         await this.saveFile();
+      } else {
+        this.historyRestorePendingSave = false;
       }
-      // console.log("Autosaved at", new Date().toLocaleTimeString());
     }
-  }
-
-  /**
-   * Gets the current file path.
-   */
-  getCurrentFilePath() {
-    return this.currentFilePath;
   }
 
   /**
@@ -145,6 +184,14 @@ class FileManager {
    */
   hasUnsavedChanges() {
     return this.isDirty;
+  }
+
+  async handleCloseRequest() {
+    if (this.savePromise) await this.savePromise;
+    await this.historyMutationQueue;
+    const shouldClose = await this._checkUnsavedChanges();
+    if (shouldClose) this._clearAutosaveTimer();
+    await window.api.respondToClose(shouldClose ? "close" : "cancel");
   }
 
   // ===== Private Methods =====
@@ -184,17 +231,54 @@ class FileManager {
    * Marks the file as dirty and schedules an autosave.
    */
   _onContentChange() {
+    // A new edit starts a new history branch after undo/redo restoration.
+    this.historyRestorePendingSave = false;
+    if (this.saveStatusEl.classList.contains("error")) {
+      this._clearStatus();
+    }
     this.isDirty = true;
     this._updateUI();
 
-    // Debounce autosave: reset the timer on every change
-    if (this.autosaveTimer) {
-      clearTimeout(this.autosaveTimer);
-    }
+    this._scheduleAutosave();
+  }
+
+  _scheduleAutosave() {
+    this._clearAutosaveTimer();
 
     this.autosaveTimer = setTimeout(() => {
-      this.autosave();
+      this.autosaveTimer = null;
+      void this.autosave();
     }, this.AUTOSAVE_DELAY);
+  }
+
+  _clearAutosaveTimer() {
+    if (this.autosaveTimer) {
+      clearTimeout(this.autosaveTimer);
+      this.autosaveTimer = null;
+    }
+  }
+
+  _setStatus(message, isError = false) {
+    if (this.saveStatusTimer) {
+      clearTimeout(this.saveStatusTimer);
+      this.saveStatusTimer = null;
+    }
+
+    this.saveStatusEl.textContent = message;
+    this.saveStatusEl.classList.toggle("error", isError);
+
+    if (!isError && message) {
+      this.saveStatusTimer = setTimeout(() => this._clearStatus(), 1800);
+    }
+  }
+
+  _clearStatus() {
+    if (this.saveStatusTimer) {
+      clearTimeout(this.saveStatusTimer);
+      this.saveStatusTimer = null;
+    }
+    this.saveStatusEl.textContent = "";
+    this.saveStatusEl.classList.remove("error");
   }
 
   /**
@@ -224,7 +308,7 @@ class FileManager {
     // Update file name display
     const displayName = this.currentFilePath
       ? this.currentFilePath.split(/[\\/]/).pop() // Get just the filename
-      : "Untitled";
+      : "Untitled (Not saved)";
 
     this.fileNameEl.textContent = displayName;
 
@@ -297,24 +381,42 @@ class FileManager {
     return content;
   }
 
-  _loadHistory(index) {
-    this.blockManager.deserialize(this._contentAt(index));
+  async _loadHistory(index) {
+    await this.blockManager.deserialize(this._contentAt(index));
     this.historyIndex = index;
-    this.isDirty = false;
+    // Deserialization intentionally does not notify the change listener, so
+    // history restoration must schedule persistence explicitly. It does not
+    // create a new checkpoint, which keeps undo/redo from recording itself.
+    this.historyRestorePendingSave = true;
+    this.isDirty = true;
     this._updateUI();
+    this._scheduleAutosave();
   }
 
   undo() {
-    if (this.historyBase === null) return;
-    if (this.isDirty) this._loadHistory(this.historyIndex);
-    if (this.historyIndex > 0) this._loadHistory(this.historyIndex - 1);
+    return this._enqueueHistoryMutation(async () => {
+      if (this.historyBase === null) return;
+      if (this.isDirty) await this._loadHistory(this.historyIndex);
+      if (this.historyIndex > 0) await this._loadHistory(this.historyIndex - 1);
+    });
   }
 
   redo() {
-    if (this.historyBase === null) return;
-    if (this.isDirty) this._loadHistory(this.historyIndex);
-    if (this.historyIndex < this.history.length)
-      this._loadHistory(this.historyIndex + 1);
+    return this._enqueueHistoryMutation(async () => {
+      if (this.historyBase === null) return;
+      if (this.isDirty) await this._loadHistory(this.historyIndex);
+      if (this.historyIndex < this.history.length) {
+        await this._loadHistory(this.historyIndex + 1);
+      }
+    });
+  }
+
+  _enqueueHistoryMutation(operation) {
+    const nextOperation = this.historyMutationQueue.then(operation);
+    this.historyMutationQueue = nextOperation.catch((error) => {
+      console.error("History mutation failed:", error);
+    });
+    return nextOperation;
   }
 
   _updateHistoryUI() {

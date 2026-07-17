@@ -3,6 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data: http: https:; connect-src 'none'; object-src 'none'; base-uri 'none';"
+    />
     <title>Markdown Blocks</title>
     <!-- Our plain CSS file - no frameworks, fully readable -->
     <link rel="stylesheet" href="styles.css" />
@@ -11,12 +15,13 @@
     <!-- Top application bar -->
     <header id="app-header">
       <div class="header-title">
-        <span id="file-name">Untitled</span>
+        <span id="file-name">Untitled (Not saved)</span>
         <span
           id="dirty-indicator"
           class="dirty-dot"
           title="Unsaved changes"
         ></span>
+        <span id="save-status" class="save-status" aria-live="polite"></span>
       </div>
       <div class="header-controls">
         <button id="btn-new" class="header-btn" title="New File">New</button>
@@ -85,6 +90,7 @@
     <script src="../node_modules/marked/lib/marked.umd.js"></script>
     <script src="../node_modules/dompurify/dist/purify.min.js"></script>
     <script src="../node_modules/diff/dist/diff.js"></script>
+    <script src="highlight.js"></script>
 
     <!-- Module scripts: loaded in order, each exposes a global class/object -->
     <script src="markdownConverter.js"></script>
