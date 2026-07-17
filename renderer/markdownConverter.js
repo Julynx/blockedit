@@ -94,11 +94,18 @@ function sanitizeHtml(html) {
     return `<pre>${escapeHtml(html)}</pre>`;
   }
 
-  const allowedUriPattern =
-    /^(?:(?:https?|file):|data:image\/(?:bmp|gif|jpeg|jpg|png|webp);)/i;
-  return DOMPurify.sanitize(html, {
-    ALLOWED_URI_REGEXP: allowedUriPattern,
-  });
+  // Custom ALLOWED_URI_REGEXP is intentionally disabled.
+  // DOMPurify 3.4.12 has a runtime interaction where enabling it causes
+  // Marked task-list <input type="checkbox"> elements to lose the attributes
+  // needed by the editor's checkbox styling. This was reproduced manually.
+  // Keep the default DOMPurify URI policy instead unless this is re-tested.
+  //
+  // const allowedUriPattern =
+  //   /^(?:(?:https?|file):|data:image\/(?:bmp|gif|jpeg|jpg|png|webp);)/i;
+  // return DOMPurify.sanitize(html, {
+  //   ALLOWED_URI_REGEXP: allowedUriPattern,
+  // });
+  return DOMPurify.sanitize(html);
 }
 
 /**

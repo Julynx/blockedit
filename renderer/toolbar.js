@@ -52,7 +52,7 @@ class Toolbar {
     );
     const checkboxListBtn = this._createIconButton(
       "checkbox-list",
-      "Checkbox List",
+      "Checkboxes",
       () => this._insertCheckboxList(textarea),
     );
     const orderedListBtn = this._createIconButton(
@@ -118,7 +118,7 @@ class Toolbar {
    * The icon is loaded from renderer/icons/trash.svg.
    */
   _createDeleteButton(onDelete) {
-    const button = this._createIconButton("trash", "Delete block", (event) => {
+    const button = this._createIconButton("trash", "Delete Block", (event) => {
       // Prevent the document click-outside handler from immediately acting
       // on the replacement block when the last block is deleted.
       event.preventDefault();
@@ -635,7 +635,7 @@ class Toolbar {
     const lineStart = textarea.value.lastIndexOf("\n", cursor - 1) + 1;
     const lineEndIndex = textarea.value.indexOf("\n", lineStart);
     const lineEnd = lineEndIndex === -1 ? textarea.value.length : lineEndIndex;
-    const insertion = "\n---\n";
+    const insertion = "\n\n---\n\n";
 
     this._replaceRange(textarea, lineEnd, lineEnd, insertion);
     this._setCursor(textarea, lineEnd + insertion.length);

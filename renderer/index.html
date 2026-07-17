@@ -39,12 +39,24 @@
       </div>
     </main>
 
+    <div id="theme-control" class="zoom-control" aria-label="Theme controls">
+      <button
+        id="theme-toggle"
+        class="zoom-btn"
+        type="button"
+        title="Enable dark mode"
+        aria-label="Enable dark mode"
+      >
+        <img src="icons/moon.svg" alt="" aria-hidden="true" />
+      </button>
+    </div>
+
     <div id="zoom-control" class="zoom-control" aria-label="Page zoom controls">
       <button
         id="zoom-out"
         class="zoom-btn"
         type="button"
-        title="Zoom out (Ctrl+-)"
+        title="Zoom out (Ctrl-)"
         aria-label="Zoom out"
       >
         -
@@ -54,7 +66,7 @@
         id="zoom-in"
         class="zoom-btn"
         type="button"
-        title="Zoom in (Ctrl++)"
+        title="Zoom in (Ctrl+)"
         aria-label="Zoom in"
       >
         +
@@ -70,7 +82,7 @@
         id="undo-btn"
         class="zoom-btn"
         type="button"
-        title="Undo"
+        title="Undo (Ctrl+Z)"
         aria-label="Undo"
       >
         ↶
@@ -79,7 +91,7 @@
         id="redo-btn"
         class="zoom-btn"
         type="button"
-        title="Redo"
+        title="Redo (Ctrl+Y)"
         aria-label="Redo"
       >
         ↷

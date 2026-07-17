@@ -615,8 +615,8 @@ class BlockManager {
     const deleteBtn = document.createElement("button");
     deleteBtn.className = "render-delete-btn";
     deleteBtn.type = "button";
-    deleteBtn.title = "Delete block";
-    deleteBtn.setAttribute("aria-label", "Delete block");
+    deleteBtn.title = "Delete Block";
+    deleteBtn.setAttribute("aria-label", "Delete Block");
     const deleteIcon = document.createElement("img");
     deleteIcon.src = "icons/trash.svg";
     deleteIcon.alt = "";

@@ -4,6 +4,27 @@
 
 // Wait for the DOM to be fully loaded before initializing
 document.addEventListener("DOMContentLoaded", () => {
+  const themeToggle = document.getElementById("theme-toggle");
+  const savedTheme = localStorage.getItem("theme");
+
+  const applyTheme = (theme) => {
+    const isDark = theme === "dark";
+    document.documentElement.dataset.theme = isDark ? "dark" : "light";
+    themeToggle.title = isDark ? "Disable dark mode" : "Enable dark mode";
+    themeToggle.setAttribute(
+      "aria-label",
+      isDark ? "Disable dark mode" : "Enable dark mode",
+    );
+  };
+
+  applyTheme(savedTheme === "dark" ? "dark" : "light");
+  themeToggle.addEventListener("click", () => {
+    const nextTheme =
+      document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    applyTheme(nextTheme);
+    localStorage.setItem("theme", nextTheme);
+  });
+
   const zoomLevel = document.getElementById("zoom-level");
 
   const updateZoomLabel = (zoom) => {
