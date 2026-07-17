@@ -77,6 +77,7 @@
   --code-string-color: #7ee787;
   --code-number-color: #ffa657;
   --code-meta-color: #ffab70;
+  --accent-color: #c57300;
 }
 
 html[data-theme="dark"] {

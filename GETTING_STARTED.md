@@ -93,8 +93,9 @@ npm --version
 <section data-block-id="block-cbb7e987-0acf-4dd7-9fab-d3632f67e523">
 
 ```bash
-   cd blockedit
-   ```
+cd blockedit
+```
+
 
 </section>
 
@@ -337,16 +338,13 @@ Toolbar SVG assets live in `renderer/icons/`. The toolbar accepts either a short
 <section data-block-id="block-cf876e79-4967-416b-992d-19fce591d4e6">
 
 ```javascript
-this._createIconButton('bold', 'Bold', onClick);
+this._createIconButton("bold", "Bold", onClick);
 // Loads renderer/icons/bold.svg
 
-</section>
-
-<section data-block-id="block-710780a3-f69f-4e02-b5aa-27b1e8eae401">
-
-this._createIconButton('icons/my-custom-icon.svg', 'Custom action', onClick);
+this._createIconButton("icons/my-custom-icon.svg", "Custom action", onClick);
 // Loads the specified relative path
 ```
+
 
 </section>
 
