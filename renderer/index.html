@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Markdown Blocks</title>
+    <!-- Our plain CSS file - no frameworks, fully readable -->
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Top application bar -->
+    <header id="app-header">
+      <div class="header-title">
+        <span id="file-name">Untitled</span>
+        <span
+          id="dirty-indicator"
+          class="dirty-dot"
+          title="Unsaved changes"
+        ></span>
+      </div>
+      <div class="header-controls">
+        <button id="btn-new" class="header-btn" title="New File">New</button>
+        <button id="btn-open" class="header-btn" title="Open File">Open</button>
+        <button id="btn-save" class="header-btn" title="Save (Ctrl+S)">
+          Save
+        </button>
+      </div>
+    </header>
+
+    <!-- Main content area where blocks live -->
+    <main id="editor-container">
+      <div id="blocks-container">
+        <!-- Blocks will be dynamically inserted here by BlockManager -->
+      </div>
+    </main>
+
+    <div id="zoom-control" class="zoom-control" aria-label="Page zoom controls">
+      <button
+        id="zoom-out"
+        class="zoom-btn"
+        type="button"
+        title="Zoom out (Ctrl+-)"
+        aria-label="Zoom out"
+      >
+        -
+      </button>
+      <span id="zoom-level" class="zoom-level" aria-live="polite">100%</span>
+      <button
+        id="zoom-in"
+        class="zoom-btn"
+        type="button"
+        title="Zoom in (Ctrl++)"
+        aria-label="Zoom in"
+      >
+        +
+      </button>
+    </div>
+
+    <!-- Load libraries from local node_modules (no CDN required) -->
+    <script src="../node_modules/marked/lib/marked.umd.js"></script>
+    <script src="../node_modules/dompurify/dist/purify.min.js"></script>
+
+    <!-- Module scripts: loaded in order, each exposes a global class/object -->
+    <script src="markdownConverter.js"></script>
+    <script src="toolbar.js"></script>
+    <script src="blockManager.js"></script>
+    <script src="fileManager.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

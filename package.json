@@ -1,0 +1,44 @@
+{
+  "name": "markdown-blocks",
+  "version": "1.0.0",
+  "description": "A block-based markdown editor built with Electron",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --win"
+  },
+  "keywords": [
+    "markdown",
+    "editor",
+    "electron"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^37.2.3",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "dompurify": "^3.4.12",
+    "marked": "^12.0.2",
+    "prettier": "^3.9.5"
+  },
+  "build": {
+    "appId": "com.markdownblocks.app",
+    "productName": "Markdown Blocks",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

@@ -1,0 +1,670 @@
+/* ============================================
+   styles.css - Plain CSS for Markdown Blocks
+   No frameworks. Everything is hand-rolled and readable.
+   ============================================ */
+
+/* CSS Variables for easy theming */
+:root {
+  --bg-color: #ffffff;
+  --text-color: #1a1a1a;
+  --border-color: #e0e0e0;
+  --hover-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  --edit-border: #ff9500; /* Orange border in edit mode */
+  --edit-shadow: 0 0 0 2px rgba(255, 149, 0, 0.15);
+  --accent-color: #ff9500;
+  --header-bg: #f7f7f7;
+  --header-border: #e0e0e0;
+  --button-bg: #ffffff;
+  --button-hover: #f0f0f0;
+  --button-active: #e0e0e0;
+  --toolbar-bg: #f9f9f9;
+  --toolbar-border: #e0e0e0;
+  --code-bg: #f5f5f5;
+  --placeholder-color: #b3b3b3; /* Light grey for empty-block hints */
+  --font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu,
+    Cantarell, sans-serif;
+  --mono-font:
+    "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace;
+}
+
+/* Reset and base styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* Floating zoom control stays available while the document scrolls. */
+.zoom-control {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: var(--header-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--hover-shadow);
+}
+
+.zoom-btn {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--button-bg);
+  color: var(--text-color);
+  font: 18px/1 var(--font-family);
+  cursor: pointer;
+}
+
+.zoom-btn:hover {
+  background: var(--button-hover);
+}
+
+.zoom-level {
+  min-width: 48px;
+  text-align: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================
+   Header / App Bar
+   ============================================ */
+#app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background-color: var(--header-bg);
+  border-bottom: 1px solid var(--header-border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+}
+
+.dirty-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--accent-color);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.dirty-dot.visible {
+  opacity: 1;
+}
+
+.header-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.header-btn {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  background-color: var(--button-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.header-btn:hover {
+  background-color: var(--button-hover);
+}
+
+.header-btn:active {
+  background-color: var(--button-active);
+}
+
+/* ============================================
+   Editor Container & Blocks
+   ============================================ */
+#editor-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 24px 16px 45vh 16px; /* Extra bottom padding for comfortable scrolling */
+}
+
+.block {
+  position: relative;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  transition: box-shadow 0.2s ease;
+}
+
+/* Soft shadow on hover */
+.block:hover {
+  box-shadow: var(--hover-shadow);
+}
+
+/* Edit mode styles */
+.block.editing {
+  box-shadow: var(--edit-shadow);
+  border: 1px solid var(--edit-border);
+}
+
+/* The textarea in edit mode */
+.block-textarea {
+  width: 100%;
+  min-height: 40px;
+  padding: 12px;
+  font-family: var(--mono-font);
+  font-size: 15px;
+  line-height: 1.6;
+  border: none;
+  outline: none;
+  resize: none; /* We auto-resize with JS */
+  background: transparent;
+  color: var(--text-color);
+  overflow: hidden; /* Hide scrollbars, we grow the textarea */
+  box-sizing: border-box;
+}
+
+/* Rendered markdown output */
+.block-rendered {
+  padding: 12px;
+  cursor: text;
+  min-height: 20px;
+}
+
+/* Grey hint shown for empty blocks in render mode */
+.block-placeholder {
+  color: var(--placeholder-color);
+  user-select: none; /* Don't let the hint text get selected/copied */
+}
+
+/* Grey hint inside the textarea (native placeholder) in edit mode */
+.block-textarea::placeholder {
+  color: var(--placeholder-color);
+}
+
+.block-rendered h1,
+.block-rendered h2,
+.block-rendered h3,
+.block-rendered h4,
+.block-rendered h5,
+.block-rendered h6 {
+  margin-top: 0.8em;
+  margin-bottom: 0.4em;
+  line-height: 1.3;
+}
+
+.block-rendered p {
+  margin: 0.5em 0;
+}
+
+.block-rendered code {
+  font-family: var(--mono-font);
+  background-color: var(--code-bg);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 0.9em;
+}
+
+.block-rendered pre {
+  background-color: var(--code-bg);
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.5em 0;
+}
+
+.block-rendered pre code {
+  background: none;
+  padding: 0;
+}
+
+.block-rendered table {
+  border-collapse: collapse;
+  margin: 0.5em 0;
+  width: 100%;
+}
+
+.block-rendered th,
+.block-rendered td {
+  border: 1px solid var(--border-color);
+  padding: 6px 12px;
+  text-align: left;
+}
+
+.block-rendered th {
+  background-color: var(--toolbar-bg);
+  font-weight: 600;
+}
+
+.block-rendered blockquote {
+  border-left: 3px solid var(--border-color);
+  padding-left: 16px;
+  margin-left: 0;
+  color: #666;
+  font-style: italic;
+}
+
+.block-rendered ul,
+.block-rendered ol {
+  margin: 0.5em 0;
+  padding-left: 24px;
+}
+
+.block-rendered input {
+  width: 1.3em;
+  height: 1.3em;
+  margin-left: 0.2em;
+  margin-right: 0.4em;
+  vertical-align: text-bottom;
+}
+
+.block-rendered input:disabled {
+  opacity: 1; /* browsers often auto-fade disabled inputs */
+  background-color: #eee;
+  border: 2px solid #666;
+  border-radius: 4px;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.block-rendered input:disabled:checked {
+  background-color: var(--accent-color);
+}
+
+.block-rendered img {
+  width: 100%;
+  height: auto;
+}
+
+/* ============================================
+   Block UI Elements (tick button, plus buttons, toolbar)
+   ============================================ */
+
+/* Tick button to confirm / render */
+.block-tick {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background-color: var(--accent-color);
+  color: white;
+  border: none;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: none; /* Only shown in edit mode */
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: transform 0.1s;
+}
+
+.block-tick:hover {
+  transform: scale(1.1);
+}
+
+.block.editing .block-tick {
+  display: flex;
+}
+
+/* Delete button for rendered blocks; editing keeps its toolbar delete action. */
+.render-delete-btn {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: var(--button-bg);
+  cursor: pointer;
+  z-index: 10;
+}
+
+.render-delete-btn img {
+  width: 16px;
+  height: 16px;
+}
+
+.block:not(.editing):hover .render-delete-btn {
+  display: flex;
+}
+
+.render-delete-btn:hover {
+  background-color: #fff0f0;
+  border-color: #f1b5b5;
+}
+
+.block.editing .block-plus {
+  display: flex;
+}
+
+/* Plus buttons for inserting blocks above/below */
+.block-plus {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: var(--button-bg);
+  border: 1px solid var(--border-color);
+  color: #666;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: none; /* Only shown on hover */
+  align-items: center;
+  justify-content: center;
+  z-index: 5;
+  transition: all 0.15s;
+}
+
+.block-plus:hover {
+  background-color: var(--accent-color);
+  color: white;
+  border-color: var(--accent-color);
+  transform: translateX(-50%) scale(1.1);
+}
+
+.block-plus-top {
+  top: -14px;
+}
+
+.block-plus-bottom {
+  bottom: -14px;
+}
+
+.block:hover .block-plus {
+  display: flex;
+}
+
+/* Toolbar that appears under a block in edit mode */
+.block-toolbar {
+  display: none; /* Only shown in edit mode */
+  padding: 8px 12px;
+  background-color: var(--toolbar-bg);
+  border-top: 1px solid var(--toolbar-border);
+  gap: 4px;
+  flex-wrap: wrap;
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+}
+
+.block.editing .block-toolbar {
+  display: flex;
+}
+
+.toolbar-btn {
+  padding: 4px 8px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  background-color: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #555;
+  transition: all 0.1s;
+}
+
+.toolbar-btn:hover {
+  background-color: var(--button-hover);
+  border-color: var(--border-color);
+}
+
+.toolbar-btn:active {
+  background-color: var(--button-active);
+}
+
+.icon-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  padding: 4px;
+}
+
+.icon-toolbar-btn img {
+  display: block;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}
+
+/* Delete action sits at the far right of the block toolbar. */
+.delete-block-btn {
+  margin-left: auto;
+  color: #c62828;
+}
+
+.delete-block-btn:hover {
+  color: #a61c1c;
+  background-color: #fff0f0;
+  border-color: #f1b5b5;
+}
+
+/* Separator between toolbar groups */
+.toolbar-separator {
+  width: 1px;
+  height: 20px;
+  background-color: var(--border-color);
+  margin: 0 4px;
+  align-self: center;
+}
+
+/* ============================================
+   Table Grid Popup (Google Docs style)
+   ============================================ */
+.table-grid-popup {
+  position: fixed; /* fixed: coordinates come from getBoundingClientRect (viewport-relative) */
+  background-color: white;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  padding: 12px;
+  z-index: 1000;
+  display: none; /* Shown via JS */
+}
+
+.table-grid-label {
+  text-align: center;
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.table-grid {
+  display: grid;
+  gap: 2px;
+}
+
+.table-grid-cell {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border-color);
+  background-color: white;
+  cursor: pointer;
+  transition: background-color 0.05s;
+}
+
+.table-grid-cell.highlighted {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+/* ============================================
+   URL Popover (for inserting links)
+   ============================================ */
+.url-popover {
+  position: fixed; /* fixed: coordinates come from getBoundingClientRect (viewport-relative) */
+  display: flex;
+  gap: 6px;
+  background-color: white;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  padding: 8px;
+  z-index: 1000;
+}
+
+.url-popover-input {
+  width: 220px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  outline: none;
+}
+
+.url-popover-input:focus {
+  border-color: var(--accent-color);
+}
+
+.url-popover-confirm {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  background-color: var(--accent-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.url-popover-confirm:hover {
+  opacity: 0.9;
+}
+
+/* ============================================
+   Header Menu
+   ============================================ */
+.header-menu {
+  position: fixed;
+  display: flex;
+  gap: 2px;
+  background-color: white;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  padding: 6px;
+  z-index: 1000;
+}
+
+.header-menu-item {
+  min-width: 34px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  background-color: var(--button-bg);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #555;
+  cursor: pointer;
+}
+
+.header-menu-item:hover {
+  background-color: var(--button-hover);
+  border-color: var(--border-color);
+}
+
+/* ============================================
+   Image Popover
+   ============================================ */
+.image-popover {
+  position: fixed;
+  display: flex;
+  gap: 6px;
+  background-color: white;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  padding: 8px;
+  z-index: 1000;
+}
+
+.image-popover-input {
+  width: 240px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  outline: none;
+}
+
+.image-popover-input:focus {
+  border-color: var(--accent-color);
+}
+
+.image-popover-browse,
+.image-popover-confirm {
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: var(--font-family);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.image-popover-browse {
+  background-color: var(--button-bg);
+  color: #555;
+}
+
+.image-popover-confirm {
+  background-color: var(--accent-color);
+  border-color: var(--accent-color);
+  color: white;
+}
+
+.image-popover-browse:hover,
+.image-popover-confirm:hover {
+  opacity: 0.9;
+}
+
+/* ============================================
+   Utility / Accessibility
+   ============================================ */
+
+/* Focus outline for keyboard navigation */
+button:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
