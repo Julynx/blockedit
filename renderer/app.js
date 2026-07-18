@@ -120,6 +120,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize the BlockManager: handles all block lifecycle
   const blockManager = new BlockManager(blocksContainer);
 
+  // Margin drag selection: rectangle select, Copy/Delete context menu
+  const selectionManager = new SelectionManager(blockManager);
+  window.selectionManager = selectionManager;
+
   // Search observes block edits and controls edit-mode match navigation.
   const searchManager = new SearchManager(blockManager);
   window.searchManager = searchManager;

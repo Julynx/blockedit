@@ -11,6 +11,7 @@ class BlockManager {
     this.blocks = []; // Array of block data objects
     this.toolbar = new Toolbar();
     this.activeEditBlock = null; // Reference to the block currently in edit mode
+    this.selectedBlockIds = new Set(); // Blocks selected via margin drag
     this.selectionStartedInsideBlock = false;
     this.draggedBlockId = null;
     this.suppressNextRenderClick = false;
@@ -113,6 +114,7 @@ class BlockManager {
     }
 
     this.blocks.splice(index, 1);
+    this.selectedBlockIds.delete(id);
 
     // A document always contains at least one block. If the last block was
     // deleted, replace it with a new empty block and put that block in edit
@@ -138,6 +140,101 @@ class BlockManager {
     if (createdReplacement) {
       await this._editBlock(this.blocks[0].id);
     }
+  }
+
+  /**
+   * Removes several blocks in a single mutation (single undo checkpoint).
+   * @param {Iterable<string>} ids
+   */
+  removeBlocks(ids) {
+    return this._enqueueMutation(() => this._removeBlocks(ids));
+  }
+
+  async _removeBlocks(ids) {
+    const idSet = new Set(ids);
+    if (idSet.size === 0) return;
+
+    // Preserve uncommitted text so Undo restores exactly what was deleted.
+    if (this.activeEditBlock && idSet.has(this.activeEditBlock.id)) {
+      this.activeEditBlock.content =
+        this.activeEditBlock.textarea?.value ?? this.activeEditBlock.content;
+      this.activeEditBlock = null;
+    }
+    const previousContent = this.serialize();
+
+    this.blocks = this.blocks.filter((block) => !idSet.has(block.id));
+    idSet.forEach((id) => this.selectedBlockIds.delete(id));
+
+    // A document always contains at least one block.
+    const createdReplacement = this.blocks.length === 0;
+    if (createdReplacement) {
+      this.blocks.push(this._createBlockData(""));
+    }
+
+    await this._renderAllBlocks();
+    this._notifyChange("commit", "delete-blocks", previousContent);
+
+    if (createdReplacement) {
+      await this._editBlock(this.blocks[0].id);
+    }
+  }
+
+  /**
+   * Selection accessors used by SelectionManager. The selected state lives
+   * here because block elements are recreated on every render; the visual
+   * class is reapplied from this set in _renderBlock.
+   */
+  selectBlocks(ids) {
+    const next = new Set(ids);
+    // Skip DOM churn when the hit test produced the same set (the common
+    // case while dragging: most frames change nothing).
+    if (
+      next.size === this.selectedBlockIds.size &&
+      [...next].every((id) => this.selectedBlockIds.has(id))
+    ) {
+      return;
+    }
+    this.selectedBlockIds = next;
+    this._applySelectionClasses();
+  }
+
+  clearSelection() {
+    if (this.selectedBlockIds.size === 0) return;
+    this.selectedBlockIds.clear();
+    this._applySelectionClasses();
+  }
+
+  getSelectedIds() {
+    // Document order, so Copy concatenates blocks as they appear on the page.
+    return this.blocks
+      .filter((block) => this.selectedBlockIds.has(block.id))
+      .map((block) => block.id);
+  }
+
+  _applySelectionClasses() {
+    for (const block of this.blocks) {
+      block.element?.classList.toggle(
+        "selected",
+        this.selectedBlockIds.has(block.id),
+      );
+    }
+  }
+
+  /**
+   * Serializes the given blocks, joined by blank lines like serialize().
+   * @param {Iterable<string>} ids
+   * @returns {string}
+   */
+  serializeBlocks(ids) {
+    const idSet = new Set(ids);
+    return this.blocks
+      .filter((block) => idSet.has(block.id))
+      .map((block) =>
+        block === this.activeEditBlock && block.textarea
+          ? block.textarea.value
+          : block.content,
+      )
+      .join("\n\n");
   }
 
   /**
@@ -273,6 +370,7 @@ class BlockManager {
     const generation = ++this.documentGeneration;
     this.blocks = [];
     this.activeEditBlock = null;
+    this.selectedBlockIds.clear();
 
     // Normalize line endings first (Windows \r\n -> \n)
     const normalized = markdown.replace(/\r\n/g, "\n");
@@ -409,6 +507,7 @@ class BlockManager {
     const blockEl = document.createElement("div");
     blockEl.className = "block";
     blockEl.dataset.blockId = block.id;
+    blockEl.classList.toggle("selected", this.selectedBlockIds.has(block.id));
 
     if (block.mode === "edit") {
       blockEl.classList.add("editing");

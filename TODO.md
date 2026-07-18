@@ -5,4 +5,4 @@
 - [x] Allow multiple instances of the app
 - [x] Dynamic TOC, created on save
 - [x] Performance optimizations
-- [ ] A way to copy the entire file
+- [x] Click and drag to copy multiple blocks or delete them.

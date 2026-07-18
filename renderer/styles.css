@@ -403,6 +403,68 @@ body {
   border-bottom: 2px solid var(--accent-color);
 }
 
+/* Selected state (margin drag selection) */
+.block.selected {
+  box-shadow: 0 0 0 2px var(--accent-color);
+}
+
+.block.selected:hover {
+  box-shadow: 0 0 0 2px var(--accent-color);
+}
+
+/* The rectangle painted while dragging from the page margin */
+.selection-rectangle {
+  position: absolute;
+  border: 1px solid var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 18%, transparent);
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* Suppress native text selection while painting the rectangle */
+body.selection-dragging {
+  user-select: none;
+}
+
+/* Right-click menu shown on selected blocks */
+.selection-context-menu {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  padding: 4px;
+  background: var(--popover-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--popover-shadow);
+  z-index: 1100;
+}
+
+.selection-menu-item {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-color);
+  font-family: var(--font-family);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.selection-menu-item:hover {
+  background: var(--button-hover);
+}
+
+.selection-menu-item.danger {
+  color: var(--danger-color);
+}
+
+.selection-menu-item.danger:hover {
+  background: var(--danger-bg);
+  color: var(--danger-hover-color);
+}
+
 /* Edit mode styles */
 .block.editing {
   box-shadow: var(--edit-shadow);
