@@ -147,6 +147,10 @@ body {
   right: 150px;
 }
 
+#theme-toggle svg {
+  fill: var(--muted-text);
+}
+
 .zoom-btn {
   width: 28px;
   height: 28px;
@@ -162,12 +166,12 @@ body {
   background: var(--button-hover);
 }
 
-.zoom-btn img {
+.zoom-btn svg {
   display: block;
   width: 16px;
   height: 16px;
   margin: auto;
-  filter: var(--icon-filter);
+  fill: var(--muted-text);
 }
 
 .zoom-level {
@@ -477,11 +481,10 @@ body {
   z-index: 10;
 }
 
-.block-tick img {
+.block-tick svg {
   width: 16px;
   height: 16px;
-  transform: translate(0.75px, 1.5px);
-  filter: none;
+  fill: #fff;
 }
 
 .block-tick:hover {
@@ -514,10 +517,10 @@ body {
   z-index: 10;
 }
 
-.render-delete-btn img {
+.render-delete-btn svg {
   width: 16px;
   height: 16px;
-  filter: none;
+  fill: var(--danger-color);
 }
 
 .block:not(.editing):hover .render-delete-btn {
@@ -606,6 +609,13 @@ body {
   transition: all 0.1s;
 }
 
+.toolbar-btn svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  fill: var(--muted-text);
+}
+
 .toolbar-btn:hover {
   background-color: var(--button-hover);
   border-color: var(--border-color);
@@ -624,22 +634,13 @@ body {
   padding: 4px;
 }
 
-.icon-toolbar-btn img {
-  display: block;
-  width: 16px;
-  height: 16px;
-  object-fit: contain;
-  filter: var(--icon-filter);
-}
-
-.delete-block-btn img {
-  filter: none;
-}
-
 /* Delete action sits at the far right of the block toolbar. */
 .delete-block-btn {
   margin-left: auto;
-  color: var(--danger-color);
+}
+
+.delete-block-btn svg {
+  fill: var(--danger-color);
 }
 
 .delete-block-btn:hover {

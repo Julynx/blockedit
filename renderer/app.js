@@ -5,6 +5,7 @@
 // Wait for the DOM to be fully loaded before initializing
 document.addEventListener("DOMContentLoaded", () => {
   const themeToggle = document.getElementById("theme-toggle");
+  new Toolbar().loadSvgIcon("icons/moon.svg", themeToggle);
   const savedTheme = localStorage.getItem("theme");
 
   const applyTheme = (theme) => {

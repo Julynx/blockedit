@@ -147,17 +147,49 @@ class Toolbar {
       ? iconReference
       : `icons/${iconReference}.svg`;
 
-    const icon = document.createElement("img");
-    icon.src = iconPath;
-    icon.alt = "";
-    icon.setAttribute("aria-hidden", "true");
-    icon.addEventListener("error", () => {
-      console.warn(`Toolbar icon could not be loaded: ${iconPath}`);
-    });
+    this.loadSvgIcon(iconPath, button);
 
-    button.appendChild(icon);
     button.addEventListener("click", onClick);
     return button;
+  }
+
+  /**
+   * Loads a local SVG and appends it inline to a container.
+   * XHR works with local file:// assets in Electron where fetch() may not.
+   */
+  loadSvgIcon(iconPath, container) {
+    const request = new XMLHttpRequest();
+    request.open("GET", iconPath, true);
+    request.onload = () => {
+      if (
+        request.status !== 0 &&
+        (request.status < 200 || request.status >= 300)
+      ) {
+        console.warn(`Toolbar icon could not be loaded: ${iconPath}`);
+        return;
+      }
+
+      try {
+        const svg = new DOMParser().parseFromString(
+          request.responseText,
+          "image/svg+xml",
+        ).documentElement;
+
+        if (svg.nodeName.toLowerCase() !== "svg") {
+          throw new Error("Icon does not contain an SVG root element");
+        }
+
+        svg.setAttribute("aria-hidden", "true");
+        svg.setAttribute("focusable", "false");
+        container.appendChild(document.importNode(svg, true));
+      } catch {
+        console.warn(`Toolbar icon could not be loaded: ${iconPath}`);
+      }
+    };
+    request.onerror = () => {
+      console.warn(`Toolbar icon could not be loaded: ${iconPath}`);
+    };
+    request.send();
   }
 
   /**

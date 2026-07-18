@@ -467,10 +467,7 @@ class BlockManager {
     tickBtn.type = "button";
     tickBtn.title = "Render (Shift+Enter)";
     tickBtn.setAttribute("aria-label", "Render (Shift+Enter)");
-    const tickIcon = document.createElement("img");
-    tickIcon.src = "icons/check.svg";
-    tickIcon.alt = "";
-    tickBtn.appendChild(tickIcon);
+    this.toolbar.loadSvgIcon("icons/check.svg", tickBtn);
     tickBtn.addEventListener("click", () => this.renderBlock(block.id));
     blockEl.appendChild(tickBtn);
 
@@ -609,10 +606,7 @@ class BlockManager {
     deleteBtn.type = "button";
     deleteBtn.title = "Delete Block";
     deleteBtn.setAttribute("aria-label", "Delete Block");
-    const deleteIcon = document.createElement("img");
-    deleteIcon.src = "icons/trash.svg";
-    deleteIcon.alt = "";
-    deleteBtn.appendChild(deleteIcon);
+    this.toolbar.loadSvgIcon("icons/trash.svg", deleteBtn);
     deleteBtn.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();

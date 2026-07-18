@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data: http: https:; connect-src 'none'; object-src 'none'; base-uri 'none';"
+      content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data: http: https:; connect-src 'self' file:; object-src 'none'; base-uri 'none';"
     />
     <title>BlockEdit</title>
     <!-- Our plain CSS file - no frameworks, fully readable -->
@@ -46,9 +46,7 @@
         type="button"
         title="Enable dark mode"
         aria-label="Enable dark mode"
-      >
-        <img src="icons/moon.svg" alt="" aria-hidden="true" />
-      </button>
+      ></button>
     </div>
 
     <div id="zoom-control" class="zoom-control" aria-label="Page zoom controls">
