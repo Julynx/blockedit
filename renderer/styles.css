@@ -125,7 +125,7 @@ body {
 /* Floating zoom control stays available while the document scrolls. */
 .zoom-control {
   position: fixed;
-  right: 20px;
+  right: 12px; /* Discount scrollbar witdh for all right padding and positioning */
   bottom: 20px;
   z-index: 200;
   display: flex;
@@ -188,7 +188,8 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 16px;
+  padding: 8px 16px 8px 16px;
+  /* We dont count the scrollbar width (looks better in this specific case) */
   background-color: var(--header-bg);
   border-bottom: 1px solid var(--header-border);
   position: sticky;
@@ -259,7 +260,8 @@ body {
 #editor-container {
   max-width: 800px;
   margin: 0 auto;
-  padding: 24px 16px 45vh 16px; /* Extra bottom padding for comfortable scrolling */
+  padding: 24px 8px 45vh 16px; /* Extra bottom padding for comfortable scrolling */
+  /* We also discount the scrollbar for right padding */
 }
 
 .block {
@@ -845,7 +847,6 @@ button:focus-visible {
   outline-offset: 2px;
 }
 
-/* Smooth scrolling temporarily disabled while investigating scroll jumps. */
-/* html {
+html {
   scroll-behavior: smooth;
-} */
+}
