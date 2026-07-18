@@ -444,11 +444,13 @@ class BlockManager {
 
     // Keyboard handling inside the editor:
     //   Enter       -> normal newline (default textarea behavior, no handler needed)
-    //   Shift+Enter -> render the block (Jupyter-style "run cell")
+    //   Shift+Enter -> render the block and insert a new block below it
     textarea.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && e.shiftKey) {
         e.preventDefault();
-        this.renderBlock(block.id);
+        this.renderBlock(block.id).then(() => {
+          this.addBlockRelative(block.id, 1, "", true);
+        });
       }
     });
 
