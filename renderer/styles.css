@@ -991,7 +991,7 @@ body {
   display: none;
   position: fixed;
   z-index: 1000;
-  width: 240px;
+  width: 22vw;
   max-height: 60vh;
   overflow-y: auto;
   padding: 8px;
