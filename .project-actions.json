@@ -7,6 +7,24 @@
       "color": "#b0eb93"
     },
     {
+      "text": "$(debug-step-over) Bump patch",
+      "command": "npm version patch",
+      "tooltip": "Start app",
+      "color": "#ebdb93"
+    },
+    {
+      "text": "$(debug-step-over) Bump minor",
+      "command": "npm version minor",
+      "tooltip": "Start app",
+      "color": "#93c4eb"
+    },
+    {
+      "text": "$(debug-step-over) Bump major",
+      "command": "npm version major",
+      "tooltip": "Start app",
+      "color": "#eb93e4"
+    },
+    {
       "text": "$(package) Build Installer",
       "command": "npm run dist",
       "tooltip": "Build Windows installer",

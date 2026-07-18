@@ -612,8 +612,8 @@ body {
 /* Tick button to confirm / render */
 .block-tick {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: -12px;
+  right: -14px;
   align-items: center;
   justify-content: center;
   width: 28px;

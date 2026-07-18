@@ -43,6 +43,15 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   applyTheme(savedTheme === "dark" ? "dark" : "light");
+
+  // Keep theme in sync across windows: localStorage is shared per app, and
+  // the "storage" event fires in every window except the one that changed it.
+  window.addEventListener("storage", (event) => {
+    if (event.key === "theme") {
+      applyTheme(event.newValue === "dark" ? "dark" : "light");
+    }
+  });
+
   themeToggle.addEventListener("click", () => {
     const nextTheme =
       document.documentElement.dataset.theme === "dark" ? "light" : "dark";
@@ -121,9 +130,6 @@ document.addEventListener("DOMContentLoaded", () => {
     .then((filePath) =>
       filePath ? fileManager.openFile(filePath) : fileManager.newFile(),
     );
-  window.api.onFileOpen((filePath) =>
-    startupPromise.then(() => fileManager.openFile(filePath)),
-  );
   window.api.onCloseRequested(() =>
     fileManager.handleCloseRequest().catch((error) => {
       console.error("Close request failed:", error);

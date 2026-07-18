@@ -20,16 +20,17 @@ const ZOOM_MAX = 2;
 const ZOOM_STEP = 0.1;
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
 
-// Keep a global reference to the window so it isn't garbage collected
-let mainWindow;
-let approvedFilePath = null;
-let closeRequestPending = false;
-let isClosing = false;
-let pendingFilePath = null;
-let rendererReady = false;
+// The app runs as a single process that manages multiple windows. Each
+// window's state is keyed by its webContents id so IPC handlers can resolve
+// which window a request came from.
+// { window, approvedFilePath, closeRequestPending, isClosing, initialFilePath }
+const windowStates = new Map();
 const initialFilePath = filePathFromArguments(
   process.defaultApp ? process.argv.slice(2) : process.argv.slice(1),
 );
+// macOS can deliver a file via "open-file" before the app is ready; it
+// becomes the first window's file.
+let pendingOpenFilePath = null;
 
 function filePathFromArguments(args) {
   return args.find(
@@ -38,13 +39,27 @@ function filePathFromArguments(args) {
   );
 }
 
-function openFileInRenderer(filePath) {
-  if (!filePath) return;
-  if (mainWindow && rendererReady) {
-    mainWindow.webContents.send("file:open-path", filePath);
-  } else {
-    pendingFilePath = filePath;
+function stateFromEvent(event) {
+  return windowStates.get(event.sender.id) || null;
+}
+
+function focusWindowWithFile(filePath) {
+  for (const state of windowStates.values()) {
+    if (state.window.isDestroyed()) continue;
+    if (pathsMatch(state.approvedFilePath, filePath)) {
+      if (state.window.isMinimized()) state.window.restore();
+      state.window.focus();
+      return true;
+    }
   }
+  return false;
+}
+
+// Opens a file by focusing the window that already has it, or creating a new
+// window for it. Without a file, always creates a new empty window.
+function openFileInWindow(filePath) {
+  if (filePath && focusWindowWithFile(filePath)) return;
+  createWindow(filePath || null);
 }
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -52,17 +67,8 @@ if (!hasSingleInstanceLock) {
   app.quit();
 } else {
   app.on("second-instance", (_event, commandLine) => {
-    const filePath = filePathFromArguments(commandLine);
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
-    openFileInRenderer(filePath);
+    openFileInWindow(filePathFromArguments(commandLine));
   });
-}
-
-function isMainWindowSender(event) {
-  return mainWindow && event.sender === mainWindow.webContents;
 }
 
 function pathsMatch(left, right) {
@@ -124,10 +130,11 @@ async function writeFileAtomically(targetPath, content) {
 }
 
 /**
- * Creates the main application window and loads the renderer HTML.
+ * Creates an application window and loads the renderer HTML.
+ * @param {string|null} filePath - File the window should open at startup.
  */
-function createWindow() {
-  mainWindow = new BrowserWindow({
+function createWindow(filePath = null) {
+  const window = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 800,
@@ -143,48 +150,49 @@ function createWindow() {
     icon: path.join(__dirname, "assets", "app-icon.ico"),
   });
 
-  // Load the HTML file that contains our UI
-  mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
+  // Capture the id now: webContents is already destroyed when "closed" fires.
+  const webContentsId = window.webContents.id;
+  const state = {
+    window,
+    approvedFilePath: null,
+    closeRequestPending: false,
+    isClosing: false,
+    initialFilePath: filePath,
+  };
+  windowStates.set(webContentsId, state);
 
-  mainWindow.webContents.once("did-finish-load", () => {
-    rendererReady = true;
-    if (pendingFilePath) {
-      const filePath = pendingFilePath;
-      pendingFilePath = null;
-      openFileInRenderer(filePath);
-    }
-  });
+  // Load the HTML file that contains our UI
+  window.loadFile(path.join(__dirname, "renderer", "index.html"));
 
   // Keep DevTools available during development without opening them in builds.
   if (!app.isPackaged) {
-    mainWindow.webContents.openDevTools();
+    window.webContents.openDevTools();
   }
 
   // Remove the default menu bar (we're making our own simple UI)
   Menu.setApplicationMenu(null);
 
   // Clean up when window is closed
-  mainWindow.on("closed", () => {
-    mainWindow = null;
-    rendererReady = false;
-    approvedFilePath = null;
+  window.on("closed", () => {
+    windowStates.delete(webContentsId);
   });
 
-  mainWindow.on("close", (event) => {
-    if (isClosing) return;
+  window.on("close", (event) => {
+    if (state.isClosing) return;
 
     event.preventDefault();
-    if (closeRequestPending) return;
+    if (state.closeRequestPending) return;
 
-    closeRequestPending = true;
-    mainWindow.webContents.send("app:close-requested");
+    state.closeRequestPending = true;
+    window.webContents.send("app:close-requested");
   });
 }
 
 // This method is called when Electron has finished initialization
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return;
-  createWindow();
+  createWindow(initialFilePath || pendingOpenFilePath || null);
+  pendingOpenFilePath = null;
 
   // On macOS, re-create a window when the dock icon is clicked and no windows are open
   app.on("activate", () => {
@@ -196,7 +204,11 @@ app.whenReady().then(() => {
 
 app.on("open-file", (event, filePath) => {
   event.preventDefault();
-  openFileInRenderer(filePath);
+  if (app.isReady()) {
+    openFileInWindow(filePath);
+  } else {
+    pendingOpenFilePath = filePath;
+  }
 });
 
 // Quit when all windows are closed (except on macOS, where apps stay active)
@@ -214,14 +226,14 @@ app.on("window-all-closed", () => {
  * Opens a file dialog to let the user pick a .md file.
  * Returns the file path and contents, or null if cancelled.
  */
-async function readFile(filePath) {
+async function readFile(state, filePath) {
   try {
     const fileInfo = await fs.stat(filePath);
     if (fileInfo.size > MAX_FILE_BYTES) {
       return { filePath, content: null, error: "File is too large" };
     }
     const content = await fs.readFile(filePath, "utf-8");
-    approvedFilePath = filePath;
+    state.approvedFilePath = filePath;
     return { filePath, content };
   } catch (error) {
     console.error("Failed to read file:", error);
@@ -229,12 +241,15 @@ async function readFile(filePath) {
   }
 }
 
-ipcMain.handle("app:initial-file-path", () => initialFilePath || null);
+ipcMain.handle("app:initial-file-path", (event) => {
+  return stateFromEvent(event)?.initialFilePath || null;
+});
 
-ipcMain.handle("file:open", async () => {
-  if (!mainWindow) return null;
+ipcMain.handle("file:open", async (event) => {
+  const state = stateFromEvent(event);
+  if (!state) return null;
 
-  const result = await dialog.showOpenDialog(mainWindow, {
+  const result = await dialog.showOpenDialog(state.window, {
     properties: ["openFile"],
     filters: [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }],
   });
@@ -243,12 +258,13 @@ ipcMain.handle("file:open", async () => {
     return null;
   }
 
-  return readFile(result.filePaths[0]);
+  return readFile(state, result.filePaths[0]);
 });
 
 ipcMain.handle("file:open-path", async (event, filePath) => {
-  if (!isMainWindowSender(event) || typeof filePath !== "string") return null;
-  return readFile(filePath);
+  const state = stateFromEvent(event);
+  if (!state || typeof filePath !== "string") return null;
+  return readFile(state, filePath);
 });
 
 // Keep zoom changes in the main process so they use Electron's page zoom.
@@ -279,10 +295,11 @@ ipcMain.handle("zoom:change", (event, direction) => {
  * The renderer receives only the chosen path, not direct dialog or file-system
  * access.
  */
-ipcMain.handle("file:choose-image", async () => {
-  if (!mainWindow) return null;
+ipcMain.handle("file:choose-image", async (event) => {
+  const state = stateFromEvent(event);
+  if (!state) return null;
 
-  const result = await dialog.showOpenDialog(mainWindow, {
+  const result = await dialog.showOpenDialog(state.window, {
     properties: ["openFile"],
     filters: [
       {
@@ -304,8 +321,8 @@ ipcMain.handle("file:choose-image", async () => {
  * If no path is provided, shows a save dialog.
  */
 ipcMain.handle("file:save", async (event, data) => {
-  if (!mainWindow) return { success: false, error: "No window" };
-  if (!isMainWindowSender(event)) {
+  const state = stateFromEvent(event);
+  if (!state) {
     return { success: false, error: "Unauthorized save request" };
   }
   if (!data || typeof data.content !== "string") {
@@ -326,13 +343,13 @@ ipcMain.handle("file:save", async (event, data) => {
 
   let targetPath = filePath;
 
-  if (targetPath && !pathsMatch(targetPath, approvedFilePath)) {
+  if (targetPath && !pathsMatch(targetPath, state.approvedFilePath)) {
     return { success: false, error: "The requested file is not approved" };
   }
 
   // If no path is known, ask the user where to save
   if (!targetPath) {
-    const result = await dialog.showSaveDialog(mainWindow, {
+    const result = await dialog.showSaveDialog(state.window, {
       defaultPath: "untitled.md",
       filters: [{ name: "Markdown", extensions: ["md"] }],
     });
@@ -345,7 +362,7 @@ ipcMain.handle("file:save", async (event, data) => {
 
   try {
     await writeFileAtomically(targetPath, content);
-    approvedFilePath = targetPath;
+    state.approvedFilePath = targetPath;
     return { success: true, filePath: targetPath };
   } catch (error) {
     console.error("Failed to save file:", error);
@@ -354,19 +371,21 @@ ipcMain.handle("file:save", async (event, data) => {
 });
 
 ipcMain.handle("file:clear-current-path", (event) => {
-  if (!isMainWindowSender(event)) return false;
-  approvedFilePath = null;
+  const state = stateFromEvent(event);
+  if (!state) return false;
+  state.approvedFilePath = null;
   return true;
 });
 
 ipcMain.handle("app:close-response", (event, decision) => {
-  if (!isMainWindowSender(event) || !closeRequestPending) return false;
+  const state = stateFromEvent(event);
+  if (!state || !state.closeRequestPending) return false;
   if (!["close", "cancel"].includes(decision)) return false;
 
-  closeRequestPending = false;
+  state.closeRequestPending = false;
   if (decision === "close") {
-    isClosing = true;
-    mainWindow.close();
+    state.isClosing = true;
+    state.window.close();
   }
   return true;
 });
@@ -409,10 +428,11 @@ ipcMain.handle("link:open-external", async (_event, targetUrl) => {
  * Shows a confirmation dialog for unsaved changes.
  * Returns 'save', 'dontsave', or 'cancel'.
  */
-ipcMain.handle("dialog:unsaved-changes", async () => {
-  if (!mainWindow) return "cancel";
+ipcMain.handle("dialog:unsaved-changes", async (event) => {
+  const state = stateFromEvent(event);
+  if (!state) return "cancel";
 
-  const result = await dialog.showMessageBox(mainWindow, {
+  const result = await dialog.showMessageBox(state.window, {
     type: "warning",
     title: "Unsaved Changes",
     message: "You have unsaved changes. Do you want to save them?",

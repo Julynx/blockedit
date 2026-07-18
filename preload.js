@@ -12,11 +12,6 @@ contextBridge.exposeInMainWorld("api", {
   getInitialFilePath: () => ipcRenderer.invoke("app:initial-file-path"),
   openFile: () => ipcRenderer.invoke("file:open"),
   openFilePath: (filePath) => ipcRenderer.invoke("file:open-path", filePath),
-  onFileOpen: (callback) => {
-    const listener = (_event, filePath) => callback(filePath);
-    ipcRenderer.on("file:open-path", listener);
-    return () => ipcRenderer.removeListener("file:open-path", listener);
-  },
   chooseImageFile: () => ipcRenderer.invoke("file:choose-image"),
   saveFile: (data) => ipcRenderer.invoke("file:save", data),
   clearCurrentFilePath: () => ipcRenderer.invoke("file:clear-current-path"),
