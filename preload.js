@@ -9,6 +9,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 // This object will be available as `window.api` in renderer scripts.
 contextBridge.exposeInMainWorld("api", {
   // File operations
+  getInitialFilePath: () => ipcRenderer.invoke("app:initial-file-path"),
   openFile: () => ipcRenderer.invoke("file:open"),
   openFilePath: (filePath) => ipcRenderer.invoke("file:open-path", filePath),
   onFileOpen: (callback) => {

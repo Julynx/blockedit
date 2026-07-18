@@ -27,17 +27,14 @@ let closeRequestPending = false;
 let isClosing = false;
 let pendingFilePath = null;
 let rendererReady = false;
+const initialFilePath = filePathFromArguments(
+  process.defaultApp ? process.argv.slice(2) : process.argv.slice(1),
+);
 
 function filePathFromArguments(args) {
   return args.find(
     (argument) =>
       !argument.startsWith("-") && /\.(md|markdown)$/i.test(argument),
-  );
-}
-
-function filePathFromProcessArguments() {
-  return filePathFromArguments(
-    process.defaultApp ? process.argv.slice(2) : process.argv.slice(1),
   );
 }
 
@@ -187,7 +184,6 @@ function createWindow() {
 // This method is called when Electron has finished initialization
 app.whenReady().then(() => {
   if (!hasSingleInstanceLock) return;
-  openFileInRenderer(filePathFromProcessArguments());
   createWindow();
 
   // On macOS, re-create a window when the dock icon is clicked and no windows are open
@@ -232,6 +228,8 @@ async function readFile(filePath) {
     return { filePath, content: null, error: error.message };
   }
 }
+
+ipcMain.handle("app:initial-file-path", () => initialFilePath || null);
 
 ipcMain.handle("file:open", async () => {
   if (!mainWindow) return null;

@@ -81,7 +81,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initialize the FileManager: handles file I/O and committed history
   const fileManager = new FileManager(blockManager);
-  const startupPromise = fileManager.newFile();
+  const startupPromise = window.api
+    .getInitialFilePath()
+    .then((filePath) =>
+      filePath ? fileManager.openFile(filePath) : fileManager.newFile(),
+    );
   window.api.onFileOpen((filePath) =>
     startupPromise.then(() => fileManager.openFile(filePath)),
   );
