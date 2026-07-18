@@ -392,7 +392,8 @@ When you type in a block:
 
 <section data-block-id="block-8a9c81b6-5579-41ee-b95f-ee1c5c79492b">
 
-- **Block storage:** Saved documents use `<section data-block-id="...">` tags to preserve block boundaries and stable block identifiers.
+- **Block storage:** Documents are kept as Markdown blocks separated by blank lines. Fenced code blocks remain intact even when they contain blank lines.
+- **Committed blocks:** Committing a changed block formats it, splits it on blank lines when necessary, creates a history checkpoint, and persists the document.
 - **Markdown and HTML:** The section tags are intentional application metadata; HTML is valid inside Markdown and lets the editor preserve draggable block boundaries.
 - **Formatting:** Leaving an edit block formats its Markdown with Prettier before rendering and saving.
 - **Safety:** The editor sanitizes rendered HTML and only opens HTTP/HTTPS links externally.

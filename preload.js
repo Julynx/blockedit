@@ -27,11 +27,11 @@ contextBridge.exposeInMainWorld("api", {
     ipcRenderer.on("app:close-requested", listener);
     return () => ipcRenderer.removeListener("app:close-requested", listener);
   },
-  respondToClose: (decision) => ipcRenderer.invoke("app:close-response", decision),
+  respondToClose: (decision) =>
+    ipcRenderer.invoke("app:close-response", decision),
 
   // Page zoom
   getZoom: () => ipcRenderer.invoke("zoom:get"),
   setZoom: (zoom) => ipcRenderer.invoke("zoom:set", zoom),
   changeZoom: (direction) => ipcRenderer.invoke("zoom:change", direction),
-
 });

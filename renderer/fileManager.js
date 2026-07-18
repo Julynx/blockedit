@@ -95,6 +95,7 @@ class FileManager {
 
       // Load the file content into blocks
       await this.blockManager.deserialize(result.content);
+      this.historyBase = this.blockManager.serialize();
       this._setStatus("Opened");
     } catch (error) {
       console.error("Failed to open file:", error);

@@ -485,7 +485,11 @@ body {
 }
 
 .block-tick:hover {
-  background-color: color-mix(in srgb, var(--accent-color) 70%, var(--bg-color) 30%);
+  background-color: color-mix(
+    in srgb,
+    var(--accent-color) 70%,
+    var(--bg-color) 30%
+  );
 }
 
 .block.editing .block-tick {

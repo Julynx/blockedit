@@ -59,11 +59,7 @@ async function writeFileAtomically(targetPath, content) {
     // This is atomic on platforms that allow rename-overwrite.
     await fs.rename(temporaryPath, targetPath);
   } catch (error) {
-    if (![
-      "EEXIST",
-      "EPERM",
-      "ENOTEMPTY",
-    ].includes(error.code)) {
+    if (!["EEXIST", "EPERM", "ENOTEMPTY"].includes(error.code)) {
       await fs.rm(temporaryPath, { force: true });
       throw error;
     }

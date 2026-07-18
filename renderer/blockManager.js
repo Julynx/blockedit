@@ -199,7 +199,18 @@ class BlockManager {
       // Format before compiling so the rendered HTML reflects the formatted
       // Markdown and the saved block uses the same normalized content.
       await this.toolbar.formatMarkdown(block.textarea);
-      block.content = block.textarea.value;
+      const formattedContent = block.textarea.value;
+
+      const shardBlocks = this._splitPlainMarkdownIntoBlocks(formattedContent);
+      const replacementContents = shardBlocks.length > 0 ? shardBlocks : [""];
+      const blockIndex = this.blocks.indexOf(block);
+      const replacementBlocks = replacementContents.map((content, index) =>
+        this._createBlockData(content, index === 0 ? block.id : undefined),
+      );
+      this.blocks.splice(blockIndex, 1, ...replacementBlocks);
+      this.activeEditBlock = null;
+      await this._renderAllBlocks();
+      return true;
     }
 
     block.mode = "render";
@@ -213,7 +224,7 @@ class BlockManager {
 
   /**
    * Serializes all blocks into a single markdown string.
-   * Each block is wrapped in <section data-block-id="..."> tags.
+   * Blocks are serialized as Markdown separated by blank lines.
    * @returns {string}
    */
   serialize() {
@@ -223,15 +234,14 @@ class BlockManager {
           block === this.activeEditBlock && block.textarea
             ? block.textarea.value
             : block.content;
-        return `<section data-block-id="${block.id}">\n\n${content}\n\n</section>`;
+        return content;
       })
       .join("\n\n");
   }
 
   /**
    * Loads blocks from a markdown string.
-   * Parses <section data-block-id="..."> tags if present,
-   * otherwise splits on blank lines.
+   * Splits Markdown on blank lines while keeping fenced code together.
    * @param {string} markdown
    */
   deserialize(markdown) {
@@ -246,44 +256,15 @@ class BlockManager {
     // Normalize line endings first (Windows \r\n -> \n)
     const normalized = markdown.replace(/\r\n/g, "\n");
 
-    // Check if the markdown contains our custom section tags
-    const sectionRegex =
-      /<section\s+data-block-id="([^"]+)"\s*>([\s\S]*?)<\/section>/g;
-    const matches = [...normalized.matchAll(sectionRegex)];
-
-    if (matches.length > 0) {
-      // Parse native format with section tags
-      matches.forEach((match) => {
-        const id = match[1];
-        const content = match[2].trim();
-        this.blocks.push({
-          id: id,
-          content: content,
-          mode: "render",
-          element: null,
-          textarea: null,
-          renderedDiv: null,
-        });
-      });
-    } else {
-      // Plain Markdown: blank lines split blocks unless they are inside a
-      // fenced code block. Keep fenced code together even when it contains
-      // multiple blank lines.
-      const rawBlocks = this._splitPlainMarkdownIntoBlocks(normalized);
-      rawBlocks.forEach((content) => {
-        if (content) {
-          this.blocks.push({
-            id: this._generateId(),
-            content,
-            mode: "render",
-            element: null,
-            textarea: null,
-            renderedDiv: null,
-          });
-        }
-      });
-    }
-
+    // Plain Markdown: blank lines split blocks unless they are inside a
+    // fenced code block. Keep fenced code together even when it contains
+    // multiple blank lines.
+    const rawBlocks = this._splitPlainMarkdownIntoBlocks(normalized);
+    rawBlocks.forEach((content) => {
+      if (content) {
+        this.blocks.push(this._createBlockData(content));
+      }
+    });
     // If no blocks were parsed, create one empty block
     if (this.blocks.length === 0) {
       this.blocks.push({
@@ -331,6 +312,17 @@ class BlockManager {
 
     finishBlock();
     return blocks;
+  }
+
+  _createBlockData(content, id = this._generateId()) {
+    return {
+      id,
+      content,
+      mode: "render",
+      element: null,
+      textarea: null,
+      renderedDiv: null,
+    };
   }
 
   whenIdle() {
