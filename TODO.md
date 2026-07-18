@@ -1,21 +1,3 @@
 # TODO
 
-Easy
-
-- [x] Checkboxes con contenido por defecto.
-- [x] Enlace tiene https:// por defecto.
-- [x] Arreglar las imagenes.
-- [x] Que se vean bien los popups cuando están al final del documento.
-  - [x] Añadir margen inferior al documento
-  - [x] Que haga scroll
-- [x] Unify border radius across all elements
-- [ ] Keybind to confirm block inserts a new block below
-
-Hard
-
-- [x] Mover los bloques arrastrando
-- [x] Undo / Redo
-
-Low priority
-
-- [x] Syntax highlighting para codigo
+- [ ] Search functionality. Locate the block that contains the text and highlight the text inside the block.
