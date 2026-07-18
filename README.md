@@ -8,6 +8,8 @@ _A markdown editor with draggable blocks and a beautiful UI._
 
 ![alt text](assets/screenshot.png)
 
+![alt text](assets/screenshot3.png)
+
 ## Features
 
 - Elegant user interface and accessible user experience. No configuration by design.
