@@ -1,5 +1,5 @@
 // blockManager.js - Block Lifecycle Management
-// Handles creating, editing, rendering, and organizing markdown blocks.
+// Handles creating, editing, rendering, and organizing BlockEdit blocks.
 // Each block is a self-contained unit with edit and render modes.
 
 class BlockManager {

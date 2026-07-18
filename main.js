@@ -105,7 +105,7 @@ function createWindow() {
       nodeIntegration: false, // Prevents renderer from accessing Node directly
       sandbox: true, // Sandboxes the renderer process
     },
-    icon: null, // You can add an icon path here later: path.join(__dirname, 'icon.png')
+    icon: path.join(__dirname, "assets", "app-icon.ico"),
   });
 
   // Load the HTML file that contains our UI

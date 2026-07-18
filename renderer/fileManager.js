@@ -311,10 +311,10 @@ class FileManager {
     // Update dirty indicator
     if (this.isDirty) {
       this.dirtyIndicatorEl.classList.add("visible");
-      document.title = `• ${displayName} - Markdown Blocks`;
+      document.title = `• ${displayName} - BlockEdit`;
     } else {
       this.dirtyIndicatorEl.classList.remove("visible");
-      document.title = `${displayName} - Markdown Blocks`;
+      document.title = `${displayName} - BlockEdit`;
     }
     this._updateHistoryUI();
   }

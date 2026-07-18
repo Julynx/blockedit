@@ -1,5 +1,5 @@
 {
-  "name": "markdown-blocks",
+  "name": "blockedit",
   "version": "1.0.0",
   "description": "A block-based markdown editor built with Electron",
   "main": "main.js",
@@ -27,16 +27,17 @@
     "prettier": "^3.9.5"
   },
   "build": {
-    "appId": "com.markdownblocks.app",
-    "productName": "Markdown Blocks",
+    "appId": "com.blockedit.app",
+    "productName": "BlockEdit",
     "files": [
       "main.js",
       "preload.js",
-      "renderer/**/*"
+      "renderer/**/*",
+      "assets/**/*"
     ],
     "win": {
       "target": "nsis",
-      "icon": null
+      "icon": "assets/app-icon.ico"
     },
     "nsis": {
       "oneClick": false,

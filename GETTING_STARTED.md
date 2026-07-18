@@ -1,4 +1,4 @@
-# Getting Started with Markdown Blocks
+# Getting Started with BlockEdit
 
 A block-based markdown editor built with Electron, inspired by Jupyter notebooks.
 
@@ -88,11 +88,11 @@ This will:
 
 1. Package the app using `electron-builder`
 2. Create a `dist/` folder
-3. Generate `Markdown Blocks Setup x.x.x.exe` inside it
+3. Generate `BlockEdit Setup x.x.x.exe` inside it
 
 ### What the Build Does
 
-- **App ID:** `com.markdownblocks.app` (used by Windows to identify the app)
+- **App ID:** `com.blockedit.app` (used by Windows to identify the app)
 - **Target:** NSIS installer (allows users to choose install directory)
 - **Files included:** Only `main.js`, `preload.js`, and everything in `renderer/`
 
@@ -178,7 +178,7 @@ When you type in a block:
 
 ## Block File Format
 
-- **Block storage:** Documents are kept as Markdown blocks separated by blank lines. Fenced code blocks remain intact even when they contain blank lines.
+- **Block storage:** Documents are kept as BlockEdit blocks separated by blank lines. Fenced code blocks remain intact even when they contain blank lines.
 - **Committed blocks:** Committing a changed block formats it, splits it on blank lines when necessary, creates a history checkpoint, and persists the document.
 - **Markdown and HTML:** The section tags are intentional application metadata; HTML is valid inside Markdown and lets the editor preserve draggable block boundaries.
 - **Formatting:** Leaving an edit block formats its Markdown with Prettier before rendering and saving.

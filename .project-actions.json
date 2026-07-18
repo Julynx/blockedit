@@ -5,6 +5,12 @@
       "command": "npm start",
       "tooltip": "Start app",
       "color": "#b0eb93"
+    },
+    {
+      "text": "$(package) Build Installer",
+      "command": "npm run dist",
+      "tooltip": "Build Windows installer",
+      "color": "#93c5fd"
     }
   ]
 }
