@@ -559,8 +559,13 @@ body {
 
 .block-plus:hover {
   background-color: var(--accent-color);
-  color: white;
   border-color: var(--accent-color);
+}
+
+.block-plus svg {
+  width: 16px;
+  height: 16px;
+  fill: var(--muted-text);
 }
 
 .block-plus-top {

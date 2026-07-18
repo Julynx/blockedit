@@ -5,7 +5,15 @@
 // Wait for the DOM to be fully loaded before initializing
 document.addEventListener("DOMContentLoaded", () => {
   const themeToggle = document.getElementById("theme-toggle");
-  new Toolbar().loadSvgIcon("icons/moon.svg", themeToggle);
+  const iconLoader = new Toolbar();
+  iconLoader.loadSvgIcon("icons/moon.svg", themeToggle);
+  iconLoader.loadSvgIcon(
+    "icons/minus.svg",
+    document.getElementById("zoom-out"),
+  );
+  iconLoader.loadSvgIcon("icons/plus.svg", document.getElementById("zoom-in"));
+  iconLoader.loadSvgIcon("icons/undo.svg", document.getElementById("undo-btn"));
+  iconLoader.loadSvgIcon("icons/redo.svg", document.getElementById("redo-btn"));
   const savedTheme = localStorage.getItem("theme");
 
   const applyTheme = (theme) => {

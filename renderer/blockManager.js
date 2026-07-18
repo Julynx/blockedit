@@ -654,8 +654,9 @@ class BlockManager {
     // Plus button above
     const plusTop = document.createElement("button");
     plusTop.className = "block-plus block-plus-top";
-    plusTop.innerHTML = "+";
     plusTop.title = "Insert block above";
+    plusTop.setAttribute("aria-label", "Insert block above");
+    this.toolbar.loadSvgIcon("icons/plus.svg", plusTop);
     plusTop.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -666,8 +667,9 @@ class BlockManager {
     // Plus button below
     const plusBottom = document.createElement("button");
     plusBottom.className = "block-plus block-plus-bottom";
-    plusBottom.innerHTML = "+";
     plusBottom.title = "Insert block below";
+    plusBottom.setAttribute("aria-label", "Insert block below");
+    this.toolbar.loadSvgIcon("icons/plus.svg", plusBottom);
     plusBottom.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
