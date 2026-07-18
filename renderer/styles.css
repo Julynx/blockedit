@@ -155,7 +155,7 @@ body {
   width: 28px;
   height: 28px;
   border: 0;
-  border-radius: 5px;
+  border-radius: 4px;
   background: var(--button-bg);
   color: var(--text-color);
   font: 18px/1 var(--font-family);
@@ -265,7 +265,7 @@ body {
 .block {
   position: relative;
   margin-bottom: 8px;
-  border-radius: 6px;
+  border-radius: 8px;
   transition: box-shadow 0.2s ease;
 }
 
@@ -351,14 +351,14 @@ body {
   font-family: var(--mono-font);
   background-color: var(--code-bg);
   padding: 2px 4px;
-  border-radius: 3px;
+  border-radius: 4px;
   font-size: 0.9em;
 }
 
 .block-rendered pre {
   background-color: var(--code-bg);
   padding: 12px;
-  border-radius: 6px;
+  border-radius: 4px;
   overflow-x: auto;
   margin: 0.5em 0;
 }
@@ -511,7 +511,7 @@ body {
   height: 28px;
   padding: 5px;
   border: 1px solid var(--border-color);
-  border-radius: 5px;
+  border-radius: 4px;
   background: var(--button-bg);
   cursor: pointer;
   z-index: 10;
@@ -594,8 +594,8 @@ body {
   border-top: 1px solid var(--toolbar-border);
   gap: 4px;
   flex-wrap: wrap;
-  border-bottom-left-radius: 6px;
-  border-bottom-right-radius: 6px;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
 }
 
 .block.editing .block-toolbar {
@@ -670,7 +670,7 @@ body {
   position: fixed; /* fixed: coordinates come from getBoundingClientRect (viewport-relative) */
   background-color: var(--popover-bg);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: 4px;
   box-shadow: var(--popover-shadow);
   padding: 12px;
   z-index: 1000;
@@ -713,7 +713,7 @@ body {
   gap: 6px;
   background-color: var(--popover-bg);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: 8px;
   box-shadow: var(--popover-shadow);
   padding: 8px;
   z-index: 1000;
@@ -757,7 +757,7 @@ body {
   gap: 2px;
   background-color: var(--popover-bg);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: 8px;
   box-shadow: var(--popover-shadow);
   padding: 6px;
   z-index: 1000;
@@ -789,7 +789,7 @@ body {
   gap: 6px;
   background-color: var(--popover-bg);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: 8px;
   box-shadow: var(--popover-shadow);
   padding: 8px;
   z-index: 1000;

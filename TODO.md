@@ -8,6 +8,8 @@ Easy
 - [x] Que se vean bien los popups cuando están al final del documento.
   - [x] Añadir margen inferior al documento
   - [x] Que haga scroll
+- [x] Unify border radius across all elements
+- [ ] Keybind to confirm block inserts a new block below
 
 Hard
 
