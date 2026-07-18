@@ -1,6 +1,6 @@
 {
   "name": "blockedit",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A block-based markdown editor built with Electron",
   "main": "main.js",
   "scripts": {
@@ -41,7 +41,10 @@
     },
     "fileAssociations": [
       {
-        "ext": ["md", "markdown"],
+        "ext": [
+          "md",
+          "markdown"
+        ],
         "name": "Markdown document",
         "description": "Markdown document",
         "role": "Editor"
