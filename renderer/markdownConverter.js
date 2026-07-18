@@ -94,18 +94,16 @@ function sanitizeHtml(html) {
     return `<pre>${escapeHtml(html)}</pre>`;
   }
 
-  // Custom ALLOWED_URI_REGEXP is intentionally disabled.
-  // DOMPurify 3.4.12 has a runtime interaction where enabling it causes
-  // Marked task-list <input type="checkbox"> elements to lose the attributes
-  // needed by the editor's checkbox styling. This was reproduced manually.
-  // Keep the default DOMPurify URI policy instead unless this is re-tested.
-  //
-  // const allowedUriPattern =
-  //   /^(?:(?:https?|file):|data:image\/(?:bmp|gif|jpeg|jpg|png|webp);)/i;
-  // return DOMPurify.sanitize(html, {
-  //   ALLOWED_URI_REGEXP: allowedUriPattern,
-  // });
-  return DOMPurify.sanitize(html);
+  // Picked local images are stored as file URLs. DOMPurify's default URI
+  // policy does not allow the file: protocol, so it strips their src value.
+  // Keep the permitted web protocols and data image types while explicitly
+  // allowing local file URLs used by the image toolbar.
+  const allowedUriPattern =
+    /^(?:(?:(?:https?|ftp|mailto|tel|callto|sms|cid|xmpp|matrix|file):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))|data:image\/(?:bmp|gif|jpeg|jpg|png|webp);)/i;
+
+  return DOMPurify.sanitize(html, {
+    ALLOWED_URI_REGEXP: allowedUriPattern,
+  });
 }
 
 /**
