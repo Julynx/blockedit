@@ -144,7 +144,7 @@ body {
 }
 
 #theme-control {
-  right: 140px;
+  right: 142px;
 }
 
 #theme-toggle svg {
@@ -234,6 +234,7 @@ body {
   display: flex;
   gap: 8px;
   align-items: center;
+  height: 32px;
 }
 
 .search-control {
@@ -296,7 +297,7 @@ body {
 
 .search-case-btn {
   height: 26px;
-  padding: 0 6px;
+  padding: 0 8px;
 }
 
 .search-nav-btn svg,
@@ -347,14 +348,14 @@ body {
 
 .search-btn {
   width: 34px;
-  padding: 6px 8px;
+  height: 100%;
+  padding: 6px;
 }
 
 .search-btn svg {
   display: block;
-  width: 16px;
-  height: 16px;
-  margin: auto;
+  height: 100%;
+  width: 100%;
   fill: var(--muted-text);
 }
 
@@ -1004,6 +1005,18 @@ body {
 }
 
 #toc-panel[hidden] {
+  display: none;
+}
+
+/* Floating TOC toggle sits below the header, under the file name. */
+#toc-control {
+  top: 68px;
+  bottom: auto;
+  left: 20px;
+  right: auto;
+}
+
+#toc-control[hidden] {
   display: none;
 }
 

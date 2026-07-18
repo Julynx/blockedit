@@ -809,7 +809,9 @@ class BlockManager {
     if (!this.activeEditBlock) return;
 
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest("#search-control, #search-btn, #toc-btn, #toc-panel")) {
+    if (
+      target?.closest("#search-control, #search-btn, #toc-control, #toc-panel")
+    ) {
       return;
     }
 

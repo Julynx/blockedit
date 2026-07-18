@@ -10,6 +10,7 @@ class TocManager {
     this.blockManager = blockManager;
     this.panel = document.getElementById("toc-panel");
     this.list = document.getElementById("toc-list");
+    this.control = document.getElementById("toc-control");
     this.toggleButton = document.getElementById("toc-btn");
     this.byBlock = new Map(); // blockId -> [{ level, content }]
     this.knownIds = new Set(); // Every block currently represented in the TOC
@@ -33,13 +34,14 @@ class TocManager {
   }
 
   /**
-   * Anchors the popup below the top bar button, right-aligned with it.
+   * Anchors the popup below the floating button, left-aligned with it.
    */
   _positionPopup() {
     const rect = this.toggleButton.getBoundingClientRect();
     const panelWidth = this.panel.offsetWidth || 240;
+    const maxLeft = window.innerWidth - panelWidth - 8;
     this.panel.style.top = `${rect.bottom + 6}px`;
-    this.panel.style.left = `${Math.max(8, rect.right - panelWidth)}px`;
+    this.panel.style.left = `${Math.max(8, Math.min(rect.left, maxLeft)) - 5}px`;
   }
 
   /**
@@ -163,7 +165,7 @@ class TocManager {
 
     const empty = itemCount === 0;
     this.panel.hidden = empty;
-    this.toggleButton.hidden = empty;
+    this.control.hidden = empty;
     if (empty) this.panel.classList.remove("open");
   }
 

@@ -67,14 +67,6 @@
           title="Search (Ctrl+F)"
           aria-label="Search (Ctrl+F)"
         ></button>
-        <button
-          id="toc-btn"
-          class="header-btn search-btn"
-          type="button"
-          title="Table of contents"
-          aria-label="Table of contents"
-          hidden
-        ></button>
         <button id="btn-new" class="header-btn" title="New File">New</button>
         <button id="btn-open" class="header-btn" title="Open File">Open</button>
         <button id="btn-save" class="header-btn" title="Save (Ctrl+S)">
@@ -90,10 +82,25 @@
       </div>
     </main>
 
-    <!-- Dynamic table of contents (popup opened from the top bar button) -->
+    <!-- Dynamic table of contents (popup opened from the floating button) -->
     <aside id="toc-panel" hidden>
       <nav id="toc-list" aria-label="Table of contents"></nav>
     </aside>
+
+    <div
+      id="toc-control"
+      class="zoom-control"
+      aria-label="Table of contents"
+      hidden
+    >
+      <button
+        id="toc-btn"
+        class="zoom-btn"
+        type="button"
+        title="Table of contents"
+        aria-label="Table of contents"
+      ></button>
+    </div>
 
     <div id="theme-control" class="zoom-control" aria-label="Theme controls">
       <button
