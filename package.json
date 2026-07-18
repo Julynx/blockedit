@@ -1,6 +1,6 @@
 {
   "name": "blockedit",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "A block-based markdown editor built with Electron",
   "main": "main.js",
   "scripts": {
