@@ -17,6 +17,9 @@ class BlockManager {
     this.mutationQueue = Promise.resolve();
     this.documentGeneration = 0;
     this._changeCallbacks = [];
+    // Folder of the opened document, set by FileManager. Relative image
+    // sources are resolved against it at render time; null for unsaved docs.
+    this.documentDirectory = null;
 
     // Listen for clicks outside any block to switch back to render mode
     document.addEventListener("mousedown", (event) => {
@@ -203,8 +206,12 @@ class BlockManager {
       }
 
       // Format before compiling so the rendered HTML reflects the formatted
-      // Markdown and the saved block uses the same normalized content.
-      await this.toolbar.formatMarkdown(block.textarea);
+      // Markdown and the saved block uses the same normalized content. The
+      // textarea is destroyed below, so refocusing it would be wasted work.
+      await this.toolbar.formatMarkdown(block.textarea, null, {
+        focus: false,
+        dispatchInput: false,
+      });
       const formattedContent = block.textarea.value;
 
       const shardBlocks = this._splitPlainMarkdownIntoBlocks(formattedContent);
@@ -215,7 +222,15 @@ class BlockManager {
       );
       this.blocks.splice(blockIndex, 1, ...replacementBlocks);
       this.activeEditBlock = null;
-      await this._renderAllBlocks();
+
+      if (replacementBlocks.length === 1) {
+        // Common case: the block did not split. Rebuild only this block's DOM
+        // instead of the whole document. The old block object is discarded.
+        block.element?.remove();
+        await this._renderBlock(replacementBlocks[0]);
+      } else {
+        await this._renderAllBlocks();
+      }
       return true;
     }
 
@@ -555,11 +570,17 @@ class BlockManager {
       placeholder.textContent = "Click here and start typing ...";
       renderedDiv.appendChild(placeholder);
     } else {
-      // Convert markdown to HTML using our modular converter
+      // Convert markdown to HTML using our modular converter. The content-
+      // keyed cache avoids reconverting unchanged blocks on mode toggles
+      // and full-document re-renders.
       try {
-        const html = await window.markdownConverter.convert(block.content);
-        // console.log(html);
-        renderedDiv.innerHTML = html;
+        if (block.renderCache?.content === block.content) {
+          renderedDiv.innerHTML = block.renderCache.html;
+        } else {
+          const html = await window.markdownConverter.convert(block.content);
+          renderedDiv.innerHTML = html;
+          block.renderCache = { content: block.content, html };
+        }
       } catch (error) {
         console.error("Failed to render markdown:", error);
         document.dispatchEvent(
@@ -570,6 +591,8 @@ class BlockManager {
         renderedDiv.textContent = block.content;
       }
     }
+
+    this._resolveImageUrls(renderedDiv);
 
     // Links should be opened by the operating system's default browser, not
     // navigated inside this Electron window. Other clicks still edit the block.
@@ -583,6 +606,24 @@ class BlockManager {
       if (link && renderedDiv.contains(link)) {
         event.preventDefault();
         event.stopPropagation();
+
+        // The href attribute preserves the Markdown author's raw reference.
+        // Relative links are resolved and validated in the main process,
+        // against the opened document's folder.
+        const rawHref = link.getAttribute("href") || "";
+        if (this._isRelativeReference(rawHref)) {
+          window.api
+            .openLocalLink(rawHref)
+            .then((result) => {
+              if (!result?.success) {
+                console.warn("Local link was not opened:", result?.error);
+              }
+            })
+            .catch((error) => {
+              console.warn("Local link was not opened:", error);
+            });
+          return;
+        }
 
         window.api
           .openExternalLink(link.href)
@@ -632,6 +673,61 @@ class BlockManager {
       this.removeBlock(block.id);
     });
     blockEl.appendChild(deleteBtn);
+  }
+
+  /**
+   * Whether an href is a relative reference to a local file (no protocol,
+   * no fragment-only anchor). Such links are opened via the main process,
+   * which resolves them against the document folder and whitelists images.
+   */
+  _isRelativeReference(href) {
+    return (
+      Boolean(href) &&
+      !href.startsWith("#") &&
+      !/^[a-z][a-z0-9+.-]*:/i.test(href)
+    );
+  }
+
+  /**
+   * Resolves relative image sources against the opened document's folder.
+   * The Markdown content is never modified. Sources that would escape the
+   * document folder (for example via "../") are left unresolved.
+   */
+  _resolveImageUrls(renderedDiv) {
+    if (!this.documentDirectory || !renderedDiv) return;
+
+    const baseUrl =
+      "file:///" + this.documentDirectory.replace(/\\/g, "/") + "/";
+
+    renderedDiv.querySelectorAll("img").forEach((img) => {
+      const src = img.getAttribute("src");
+      if (!src || src.startsWith("#")) return;
+
+      if (/^[a-z][a-z0-9+.-]*:/i.test(src)) {
+        // Windows-absolute paths (C:\...) look like a protocol but are local
+        // files; convert them to file URLs the same way the toolbar does.
+        if (/^[A-Za-z]:[\\/]/.test(src)) {
+          img.src = "file:///" + encodeURI(src.replace(/\\/g, "/"));
+        }
+        return;
+      }
+
+      const resolved = new URL(src, baseUrl).href;
+      if (resolved.startsWith(baseUrl)) {
+        img.src = resolved;
+      }
+    });
+  }
+
+  /**
+   * Re-resolves image sources in every rendered block. Used when a
+   * previously unsaved document gains its first file path, so relative
+   * images repair themselves right after the first save.
+   */
+  refreshImageUrls() {
+    for (const block of this.blocks) {
+      if (block.renderedDiv) this._resolveImageUrls(block.renderedDiv);
+    }
   }
 
   _moveBlock(id, insertIndex) {
@@ -713,7 +809,9 @@ class BlockManager {
     if (!this.activeEditBlock) return;
 
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest("#search-control, #search-btn")) return;
+    if (target?.closest("#search-control, #search-btn, #toc-btn, #toc-panel")) {
+      return;
+    }
 
     // A drag selection can start inside the textarea and finish outside the
     // block. It still produces a click event, but it is not an outside click

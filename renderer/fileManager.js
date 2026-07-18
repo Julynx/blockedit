@@ -51,6 +51,7 @@ class FileManager {
     document.dispatchEvent(new CustomEvent("editor-search-clear"));
 
     this.currentFilePath = null;
+    this.blockManager.documentDirectory = null;
     this.isDirty = false;
     this.historyRestorePendingSave = false;
     this._resetHistory();
@@ -62,6 +63,7 @@ class FileManager {
     // Add an empty block in edit mode
     await this.blockManager.addBlock();
     this.historyBase = this.blockManager.serialize();
+    document.dispatchEvent(new CustomEvent("editor-document-replaced"));
   }
 
   /**
@@ -90,6 +92,9 @@ class FileManager {
       await this.commitQueue;
 
       this.currentFilePath = result.filePath;
+      // Relative images resolve against the document folder at render time,
+      // so the directory must be set before the blocks are deserialized.
+      this.blockManager.documentDirectory = this._dirname(result.filePath);
       this.isDirty = false;
       this.historyRestorePendingSave = false;
       this._resetHistory();
@@ -100,6 +105,7 @@ class FileManager {
       // Load the file content into blocks
       await this.blockManager.deserialize(result.content);
       this.historyBase = this.blockManager.serialize();
+      document.dispatchEvent(new CustomEvent("editor-document-replaced"));
       this._setStatus("Opened");
     } catch (error) {
       console.error("Failed to open file:", error);
@@ -229,6 +235,13 @@ class FileManager {
     return nextOperation;
   }
 
+  /**
+   * Returns the folder portion of a file path, using either slash style.
+   */
+  _dirname(filePath) {
+    return filePath.replace(/[\\/][^\\/]*$/, "");
+  }
+
   async _persistContent(content, allowSaveDialog = false) {
     if (!this.currentFilePath && !allowSaveDialog) return true;
 
@@ -248,6 +261,12 @@ class FileManager {
     }
 
     this.currentFilePath = result.filePath;
+    const newDirectory = this._dirname(result.filePath);
+    if (this.blockManager.documentDirectory !== newDirectory) {
+      this.blockManager.documentDirectory = newDirectory;
+      // A first save gives relative images a folder to resolve against.
+      this.blockManager.refreshImageUrls();
+    }
     const contentIsCurrent = this.blockManager.serialize() === content;
     this.isDirty = !contentIsCurrent;
     if (contentIsCurrent) {

@@ -2,6 +2,10 @@
 // Provides buttons to insert or wrap markdown syntax around selections.
 // Includes a Google Docs-style grid popup for table insertion.
 
+// Parsed SVG elements cached by path. The cached original never enters the
+// DOM; callers always receive a synchronous clone.
+const svgIconCache = new Map();
+
 class Toolbar {
   constructor() {
     this.activePopup = null; // Tracks the currently open table grid popup
@@ -158,6 +162,12 @@ class Toolbar {
    * XHR works with local file:// assets in Electron where fetch() may not.
    */
   loadSvgIcon(iconPath, container) {
+    const cached = svgIconCache.get(iconPath);
+    if (cached) {
+      container.appendChild(cached.cloneNode(true));
+      return;
+    }
+
     const request = new XMLHttpRequest();
     request.open("GET", iconPath, true);
     request.onload = () => {
@@ -181,7 +191,8 @@ class Toolbar {
 
         svg.setAttribute("aria-hidden", "true");
         svg.setAttribute("focusable", "false");
-        container.appendChild(document.importNode(svg, true));
+        svgIconCache.set(iconPath, svg);
+        container.appendChild(svg.cloneNode(true));
       } catch {
         console.warn(`Toolbar icon could not be loaded: ${iconPath}`);
       }
@@ -712,9 +723,15 @@ class Toolbar {
    *
    * @param {HTMLTextAreaElement} textarea - The active block textarea
    * @param {HTMLButtonElement|null} button - Optional button to disable
+   * @param {Object} options - Set focus/dispatchInput to false when the
+   * textarea is about to be replaced by a render pass.
    * @returns {Promise<boolean>} Whether formatting succeeded
    */
-  async formatMarkdown(textarea, button = null) {
+  async formatMarkdown(
+    textarea,
+    button = null,
+    { focus = true, dispatchInput = true } = {},
+  ) {
     if (!textarea) return false;
 
     if (button) {
@@ -730,11 +747,18 @@ class Toolbar {
 
       textarea.value = result.content;
 
-      // This keeps auto-resizing and dirty-state tracking working.
-      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      if (dispatchInput) {
+        // This keeps auto-resizing and dirty-state tracking working.
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      }
 
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+      if (focus) {
+        textarea.focus({ preventScroll: true });
+        textarea.setSelectionRange(
+          textarea.value.length,
+          textarea.value.length,
+        );
+      }
       return true;
     } catch (error) {
       console.error("Could not format Markdown:", error);

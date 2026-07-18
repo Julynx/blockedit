@@ -30,6 +30,7 @@ document.addEventListener("DOMContentLoaded", () => {
   iconLoader.loadSvgIcon("icons/plus.svg", document.getElementById("zoom-in"));
   iconLoader.loadSvgIcon("icons/undo.svg", document.getElementById("undo-btn"));
   iconLoader.loadSvgIcon("icons/redo.svg", document.getElementById("redo-btn"));
+  iconLoader.loadSvgIcon("icons/toc.svg", document.getElementById("toc-btn"));
   const savedTheme = localStorage.getItem("theme");
 
   const applyTheme = (theme) => {
@@ -122,6 +123,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // Search observes block edits and controls edit-mode match navigation.
   const searchManager = new SearchManager(blockManager);
   window.searchManager = searchManager;
+
+  // Table of contents tracks committed block headings.
+  const tocManager = new TocManager(blockManager);
+  window.tocManager = tocManager;
 
   // Initialize the FileManager: handles file I/O and committed history
   const fileManager = new FileManager(blockManager);

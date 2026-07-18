@@ -67,6 +67,14 @@
           title="Search (Ctrl+F)"
           aria-label="Search (Ctrl+F)"
         ></button>
+        <button
+          id="toc-btn"
+          class="header-btn search-btn"
+          type="button"
+          title="Table of contents"
+          aria-label="Table of contents"
+          hidden
+        ></button>
         <button id="btn-new" class="header-btn" title="New File">New</button>
         <button id="btn-open" class="header-btn" title="Open File">Open</button>
         <button id="btn-save" class="header-btn" title="Save (Ctrl+S)">
@@ -81,6 +89,11 @@
         <!-- Blocks will be dynamically inserted here by BlockManager -->
       </div>
     </main>
+
+    <!-- Dynamic table of contents (popup opened from the top bar button) -->
+    <aside id="toc-panel" hidden>
+      <nav id="toc-list" aria-label="Table of contents"></nav>
+    </aside>
 
     <div id="theme-control" class="zoom-control" aria-label="Theme controls">
       <button
@@ -142,6 +155,7 @@
     <script src="toolbar.js"></script>
     <script src="blockManager.js"></script>
     <script src="searchManager.js"></script>
+    <script src="tocManager.js"></script>
     <script src="fileManager.js"></script>
     <script src="app.js"></script>
   </body>

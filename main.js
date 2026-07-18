@@ -13,7 +13,10 @@ const {
 } = require("electron");
 const path = require("path");
 const fs = require("fs").promises; // Use promises for async/await syntax
-const prettier = require("prettier");
+
+// Prettier is required lazily on first use: it costs ~0.4s to load and is
+// only needed when a block is formatted.
+let prettier = null;
 
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 2;
@@ -409,10 +412,11 @@ ipcMain.handle("link:open-external", async (_event, targetUrl) => {
     return { success: false, error: "Invalid link" };
   }
 
-  // Only allow normal web links. This prevents markdown from asking the OS
-  // to open file:, javascript:, or other privileged protocols.
-  if (!["http:", "https:"].includes(parsedUrl.protocol)) {
-    return { success: false, error: "Only HTTP and HTTPS links can be opened" };
+  // Only allow secure web links. This prevents markdown from asking the OS
+  // to open file:, javascript:, or other privileged protocols. Local files
+  // go through the whitelisted "link:open-local" handler instead.
+  if (parsedUrl.protocol !== "https:") {
+    return { success: false, error: "Only HTTPS links can be opened" };
   }
 
   try {
@@ -421,6 +425,85 @@ ipcMain.handle("link:open-external", async (_event, targetUrl) => {
   } catch (error) {
     console.error("Failed to open external link:", error);
     return { success: false, error: error.message };
+  }
+});
+
+// Local link targets are limited to images inside the opened document's
+// folder. Anything else (executables, scripts, other documents) is rejected.
+const LOCAL_LINK_WHITELIST = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".bmp",
+  ".svg",
+  ".ico",
+  ".avif",
+]);
+
+/**
+ * Opens a relative link from a rendered block with the OS default app.
+ * The renderer supplies only the raw relative href; resolution happens here
+ * against the window's approved file path, so the renderer cannot escalate
+ * to absolute paths, other protocols, or files outside the document folder.
+ */
+ipcMain.handle("link:open-local", async (event, relativePath) => {
+  const fail = (error) => ({ success: false, error });
+
+  if (typeof relativePath !== "string" || relativePath.length > 2048) {
+    return fail("Invalid link");
+  }
+
+  const withoutFragment = relativePath.split("#", 1)[0];
+  if (!withoutFragment || withoutFragment.startsWith("//")) {
+    return fail("Invalid link");
+  }
+
+  // hrefs arrive URL-encoded; decode before touching the filesystem.
+  let decoded;
+  try {
+    decoded = decodeURIComponent(withoutFragment);
+  } catch (_error) {
+    return fail("Invalid link");
+  }
+
+  // No protocols, drive letters, or UNC paths: relative references only.
+  if (/^[a-z][a-z0-9+.-]*:/i.test(decoded)) {
+    return fail("Only relative links can be opened");
+  }
+  if (decoded.startsWith("\\\\")) {
+    return fail("Only relative links can be opened");
+  }
+
+  const state = stateFromEvent(event);
+  if (!state || !state.approvedFilePath) {
+    return fail("No document folder");
+  }
+
+  const documentDirectory = path.dirname(state.approvedFilePath);
+  const resolved = path.resolve(documentDirectory, decoded);
+
+  // Containment: the target must stay inside the document folder subtree.
+  if (
+    resolved !== documentDirectory &&
+    !resolved.startsWith(documentDirectory + path.sep)
+  ) {
+    return fail("Link is outside the document folder");
+  }
+
+  const extension = path.extname(resolved).toLowerCase();
+  if (!LOCAL_LINK_WHITELIST.has(extension)) {
+    return fail("Only image links can be opened");
+  }
+
+  try {
+    const openError = await shell.openPath(resolved);
+    if (openError) return fail(openError);
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to open local link:", error);
+    return fail(error.message);
   }
 });
 
@@ -458,6 +541,7 @@ ipcMain.handle("markdown:format", async (_event, markdown) => {
   }
 
   try {
+    if (!prettier) prettier = require("prettier");
     const formattedMarkdown = await prettier.format(markdown, {
       parser: "markdown",
     });

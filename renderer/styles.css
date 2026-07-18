@@ -144,7 +144,7 @@ body {
 }
 
 #theme-control {
-  right: 150px;
+  right: 140px;
 }
 
 #theme-toggle svg {
@@ -978,6 +978,79 @@ body {
 .image-popover-browse:hover,
 .image-popover-confirm:hover {
   opacity: 0.9;
+}
+
+/* ============================================
+   Table of Contents
+   ============================================ */
+/* The TOC always opens as a popup anchored below its top bar button.
+   Position is set from JS using the button's bounding rect. */
+#toc-panel {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  width: 240px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 8px;
+  background: var(--popover-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--popover-shadow);
+}
+
+#toc-panel.open {
+  display: block;
+}
+
+#toc-panel[hidden] {
+  display: none;
+}
+
+.toc-item {
+  display: block;
+  width: 100%;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted-text);
+  font: 13px var(--font-family);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toc-item:hover {
+  background: var(--button-hover);
+  color: var(--text-color);
+}
+
+.toc-level-1 {
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.toc-level-2 {
+  padding-left: 18px;
+}
+
+.toc-level-3 {
+  padding-left: 30px;
+}
+
+.toc-level-4 {
+  padding-left: 42px;
+}
+
+.toc-level-5 {
+  padding-left: 54px;
+}
+
+.toc-level-6 {
+  padding-left: 66px;
 }
 
 /* ============================================

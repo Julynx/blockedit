@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld("api", {
   saveFile: (data) => ipcRenderer.invoke("file:save", data),
   clearCurrentFilePath: () => ipcRenderer.invoke("file:clear-current-path"),
   openExternalLink: (url) => ipcRenderer.invoke("link:open-external", url),
+  openLocalLink: (relativePath) =>
+    ipcRenderer.invoke("link:open-local", relativePath),
 
   // Markdown formatting
   formatMarkdown: (markdown) => {
