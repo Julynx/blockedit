@@ -94,11 +94,17 @@ This will:
 
 - **App ID:** `com.blockedit.app` (used by Windows to identify the app)
 - **Target:** NSIS installer (allows users to choose install directory)
+- **File associations:** `.md` and `.markdown` files open with BlockEdit
 - **Files included:** Only `main.js`, `preload.js`, and everything in `renderer/`
 
 ### Distributing the App
 
 The generated `.exe` is a self-contained installer. Users can run it and install the app like any other Windows program.
+
+After installation, Windows registers BlockEdit as an application for Markdown
+files. Opening an `.md` or `.markdown` file launches BlockEdit and loads that
+file. Rebuild the installer with `npm run dist` after changing the association;
+already-installed copies do not receive packaging changes automatically.
 
 ---
 

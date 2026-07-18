@@ -81,6 +81,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initialize the FileManager: handles file I/O and committed history
   const fileManager = new FileManager(blockManager);
+  const startupPromise = fileManager.newFile();
+  window.api.onFileOpen((filePath) =>
+    startupPromise.then(() => fileManager.openFile(filePath)),
+  );
   window.api.onCloseRequested(() =>
     fileManager.handleCloseRequest().catch((error) => {
       console.error("Close request failed:", error);
@@ -99,7 +103,7 @@ document.addEventListener("DOMContentLoaded", () => {
   startupControls.forEach((control) => {
     control.disabled = true;
   });
-  fileManager.newFile().finally(() => {
+  startupPromise.finally(() => {
     startupControls.forEach((control) => {
       control.disabled = false;
     });

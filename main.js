@@ -25,6 +25,44 @@ let mainWindow;
 let approvedFilePath = null;
 let closeRequestPending = false;
 let isClosing = false;
+let pendingFilePath = null;
+let rendererReady = false;
+
+function filePathFromArguments(args) {
+  return args.find(
+    (argument) =>
+      !argument.startsWith("-") && /\.(md|markdown)$/i.test(argument),
+  );
+}
+
+function filePathFromProcessArguments() {
+  return filePathFromArguments(
+    process.defaultApp ? process.argv.slice(2) : process.argv.slice(1),
+  );
+}
+
+function openFileInRenderer(filePath) {
+  if (!filePath) return;
+  if (mainWindow && rendererReady) {
+    mainWindow.webContents.send("file:open-path", filePath);
+  } else {
+    pendingFilePath = filePath;
+  }
+}
+
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (_event, commandLine) => {
+    const filePath = filePathFromArguments(commandLine);
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+    openFileInRenderer(filePath);
+  });
+}
 
 function isMainWindowSender(event) {
   return mainWindow && event.sender === mainWindow.webContents;
@@ -111,6 +149,15 @@ function createWindow() {
   // Load the HTML file that contains our UI
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
 
+  mainWindow.webContents.once("did-finish-load", () => {
+    rendererReady = true;
+    if (pendingFilePath) {
+      const filePath = pendingFilePath;
+      pendingFilePath = null;
+      openFileInRenderer(filePath);
+    }
+  });
+
   // Keep DevTools available during development without opening them in builds.
   if (!app.isPackaged) {
     mainWindow.webContents.openDevTools();
@@ -122,6 +169,7 @@ function createWindow() {
   // Clean up when window is closed
   mainWindow.on("closed", () => {
     mainWindow = null;
+    rendererReady = false;
     approvedFilePath = null;
   });
 
@@ -138,6 +186,8 @@ function createWindow() {
 
 // This method is called when Electron has finished initialization
 app.whenReady().then(() => {
+  if (!hasSingleInstanceLock) return;
+  openFileInRenderer(filePathFromProcessArguments());
   createWindow();
 
   // On macOS, re-create a window when the dock icon is clicked and no windows are open
@@ -146,6 +196,11 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+});
+
+app.on("open-file", (event, filePath) => {
+  event.preventDefault();
+  openFileInRenderer(filePath);
 });
 
 // Quit when all windows are closed (except on macOS, where apps stay active)
@@ -163,19 +218,7 @@ app.on("window-all-closed", () => {
  * Opens a file dialog to let the user pick a .md file.
  * Returns the file path and contents, or null if cancelled.
  */
-ipcMain.handle("file:open", async () => {
-  if (!mainWindow) return null;
-
-  const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ["openFile"],
-    filters: [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }],
-  });
-
-  if (result.canceled || result.filePaths.length === 0) {
-    return null;
-  }
-
-  const filePath = result.filePaths[0];
+async function readFile(filePath) {
   try {
     const fileInfo = await fs.stat(filePath);
     if (fileInfo.size > MAX_FILE_BYTES) {
@@ -188,6 +231,26 @@ ipcMain.handle("file:open", async () => {
     console.error("Failed to read file:", error);
     return { filePath, content: null, error: error.message };
   }
+}
+
+ipcMain.handle("file:open", async () => {
+  if (!mainWindow) return null;
+
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ["openFile"],
+    filters: [{ name: "Markdown", extensions: ["md", "markdown", "txt"] }],
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+
+  return readFile(result.filePaths[0]);
+});
+
+ipcMain.handle("file:open-path", async (event, filePath) => {
+  if (!isMainWindowSender(event) || typeof filePath !== "string") return null;
+  return readFile(filePath);
 });
 
 // Keep zoom changes in the main process so they use Electron's page zoom.

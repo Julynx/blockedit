@@ -67,7 +67,7 @@ class FileManager {
    * Opens an existing file via dialog.
    * If there are unsaved changes, prompts the user first.
    */
-  async openFile() {
+  async openFile(filePath = null) {
     const shouldProceed = await this._checkUnsavedChanges();
     if (!shouldProceed) return;
     await this.historyMutationQueue;
@@ -75,7 +75,9 @@ class FileManager {
     await this.blockManager.whenIdle();
 
     try {
-      const result = await window.api.openFile();
+      const result = filePath
+        ? await window.api.openFilePath(filePath)
+        : await window.api.openFile();
       if (!result) return; // User cancelled
 
       if (result.error) {
