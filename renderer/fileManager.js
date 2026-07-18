@@ -48,6 +48,7 @@ class FileManager {
     await this.commitQueue;
     await this.blockManager.whenIdle();
     await window.api.clearCurrentFilePath();
+    document.dispatchEvent(new CustomEvent("editor-search-clear"));
 
     this.currentFilePath = null;
     this.isDirty = false;
@@ -94,6 +95,7 @@ class FileManager {
       this._resetHistory();
       this.historyBase = result.content;
       this._updateUI();
+      document.dispatchEvent(new CustomEvent("editor-search-clear"));
 
       // Load the file content into blocks
       await this.blockManager.deserialize(result.content);
@@ -381,6 +383,7 @@ class FileManager {
 
   async _loadHistory(index) {
     await this.blockManager.deserialize(this._contentAt(index));
+    document.dispatchEvent(new CustomEvent("editor-document-replaced"));
     this.historyIndex = index;
     // Deserialization intentionally does not notify the change listener.
     // Restore persistence does not create a new checkpoint.

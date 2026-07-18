@@ -24,6 +24,49 @@
         <span id="save-status" class="save-status" aria-live="polite"></span>
       </div>
       <div class="header-controls">
+        <div id="search-control" class="search-control" hidden>
+          <button
+            id="search-prev"
+            class="search-nav-btn"
+            type="button"
+            title="Previous occurrence"
+            aria-label="Previous occurrence"
+          ></button>
+          <button
+            id="search-next"
+            class="search-nav-btn"
+            type="button"
+            title="Next occurrence"
+            aria-label="Next occurrence"
+          ></button>
+          <span id="search-count" class="search-count" aria-live="polite"
+            >0 / 0</span
+          >
+          <div class="search-field">
+            <input
+              id="search-input"
+              type="search"
+              placeholder="Search"
+              aria-label="Search document"
+              autocomplete="off"
+            />
+            <button
+              id="search-case"
+              class="search-case-btn"
+              type="button"
+              title="Match case"
+              aria-label="Match case"
+              aria-pressed="false"
+            ></button>
+          </div>
+        </div>
+        <button
+          id="search-btn"
+          class="header-btn search-btn"
+          type="button"
+          title="Search (Ctrl+F)"
+          aria-label="Search (Ctrl+F)"
+        ></button>
         <button id="btn-new" class="header-btn" title="New File">New</button>
         <button id="btn-open" class="header-btn" title="Open File">Open</button>
         <button id="btn-save" class="header-btn" title="Save (Ctrl+S)">
@@ -98,6 +141,7 @@
     <script src="markdownConverter.js"></script>
     <script src="toolbar.js"></script>
     <script src="blockManager.js"></script>
+    <script src="searchManager.js"></script>
     <script src="fileManager.js"></script>
     <script src="app.js"></script>
   </body>

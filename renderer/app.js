@@ -6,6 +6,22 @@
 document.addEventListener("DOMContentLoaded", () => {
   const themeToggle = document.getElementById("theme-toggle");
   const iconLoader = new Toolbar();
+  iconLoader.loadSvgIcon(
+    "icons/search.svg",
+    document.getElementById("search-btn"),
+  );
+  iconLoader.loadSvgIcon(
+    "icons/previous-match.svg",
+    document.getElementById("search-prev"),
+  );
+  iconLoader.loadSvgIcon(
+    "icons/next-match.svg",
+    document.getElementById("search-next"),
+  );
+  iconLoader.loadSvgIcon(
+    "icons/case-sensitive.svg",
+    document.getElementById("search-case"),
+  );
   iconLoader.loadSvgIcon("icons/moon.svg", themeToggle);
   iconLoader.loadSvgIcon(
     "icons/minus.svg",
@@ -59,6 +75,12 @@ document.addEventListener("DOMContentLoaded", () => {
       document.activeElement === event.target;
     const key = event.key.toLowerCase();
 
+    if (key === "f") {
+      event.preventDefault();
+      searchManager.open();
+      return;
+    }
+
     // Textareas retain the browser's native undo and redo behavior.
     if (isTextareaTarget && (key === "z" || key === "y")) return;
 
@@ -87,6 +109,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initialize the BlockManager: handles all block lifecycle
   const blockManager = new BlockManager(blocksContainer);
+
+  // Search observes block edits and controls edit-mode match navigation.
+  const searchManager = new SearchManager(blockManager);
+  window.searchManager = searchManager;
 
   // Initialize the FileManager: handles file I/O and committed history
   const fileManager = new FileManager(blockManager);

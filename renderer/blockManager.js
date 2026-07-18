@@ -16,6 +16,7 @@ class BlockManager {
     this.suppressNextRenderClick = false;
     this.mutationQueue = Promise.resolve();
     this.documentGeneration = 0;
+    this._changeCallbacks = [];
 
     // Listen for clicks outside any block to switch back to render mode
     document.addEventListener("mousedown", (event) => {
@@ -71,7 +72,9 @@ class BlockManager {
       blockData,
     );
     await this._renderBlock(blockData);
-    this._notifyChange("commit", "create-block");
+    this._notifyChange("commit", "create-block", null, {
+      blockId: blockData.id,
+    });
 
     if (autoEdit) {
       await this._editBlock(blockData.id);
@@ -124,7 +127,10 @@ class BlockManager {
     }
 
     await this._renderAllBlocks();
-    this._notifyChange("commit", "delete-block", previousContent);
+    this._notifyChange("commit", "delete-block", previousContent, {
+      blockId: id,
+      deletedBlockId: id,
+    });
 
     if (createdReplacement) {
       await this._editBlock(this.blocks[0].id);
@@ -176,7 +182,7 @@ class BlockManager {
     const generation = this.documentGeneration;
     const rendered = await this._renderBlockContent(id);
     if (rendered && generation === this.documentGeneration) {
-      this._notifyChange("commit", "render");
+      this._notifyChange("commit", "render", null, { blockId: id });
     }
     return rendered;
   }
@@ -333,7 +339,7 @@ class BlockManager {
    * Registers a callback for edit and committed document changes.
    */
   onChange(callback) {
-    this._changeCallback = callback;
+    this._changeCallbacks.push(callback);
   }
 
   // ===== Private Methods =====
@@ -409,6 +415,7 @@ class BlockManager {
     this._addPlusButtons(blockEl, block.id);
 
     block.element = blockEl;
+    window.searchManager?.refreshBlock(block.id);
 
     // Insert the element at the block's correct position in the list.
     // (appendChild would dump it at the end, making blocks "jump" to the
@@ -429,6 +436,9 @@ class BlockManager {
    * Builds the edit mode UI: textarea, toolbar, tick button.
    */
   _buildEditMode(blockEl, block) {
+    const editorSurface = document.createElement("div");
+    editorSurface.className = "block-editor-surface";
+
     // Textarea for editing markdown
     const textarea = document.createElement("textarea");
     textarea.className = "block-textarea";
@@ -439,8 +449,14 @@ class BlockManager {
     // Auto-resize as user types
     textarea.addEventListener("input", () => {
       this._autoResizeTextarea(textarea);
-      this._notifyChange("edit");
+      this._notifyChange("edit", "input", null, {
+        blockId: block.id,
+        blockContent: textarea.value,
+      });
     });
+    textarea.addEventListener("scroll", () =>
+      window.searchManager?.refreshBlock(block.id),
+    );
 
     // Keyboard handling inside the editor:
     //   Enter       -> normal newline (default textarea behavior, no handler needed)
@@ -454,7 +470,8 @@ class BlockManager {
       }
     });
 
-    blockEl.appendChild(textarea);
+    editorSurface.appendChild(textarea);
+    blockEl.appendChild(editorSurface);
     block.textarea = textarea;
 
     // Toolbar for formatting
@@ -695,6 +712,9 @@ class BlockManager {
   _handleDocumentClick(event) {
     if (!this.activeEditBlock) return;
 
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("#search-control, #search-btn")) return;
+
     // A drag selection can start inside the textarea and finish outside the
     // block. It still produces a click event, but it is not an outside click
     // in the editing sense, so leave the block in edit mode.
@@ -715,15 +735,21 @@ class BlockManager {
   /**
    * Notifies the change callback with a captured committed document snapshot.
    */
-  _notifyChange(type = "edit", reason = type, previousContent = null) {
-    if (this._changeCallback) {
-      this._changeCallback({
-        type,
-        reason,
-        content: type === "commit" ? this.serialize() : null,
-        previousContent,
-      });
-    }
+  _notifyChange(
+    type = "edit",
+    reason = type,
+    previousContent = null,
+    metadata = {},
+  ) {
+    const change = {
+      type,
+      reason,
+      content:
+        type === "commit" ? this.serialize() : (metadata.blockContent ?? null),
+      previousContent,
+      ...metadata,
+    };
+    this._changeCallbacks.forEach((callback) => callback(change));
   }
 }
 
