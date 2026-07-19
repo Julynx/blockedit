@@ -897,8 +897,23 @@ class BlockManager {
    * No scrollbars, no width changes — just smooth vertical growth.
    */
   _autoResizeTextarea(textarea) {
+    // Resetting to "auto" momentarily collapses the textarea. For blocks
+    // taller than the window that shrinks the document, so the browser
+    // clamps window.scrollY and the view jumps toward the top of the block
+    // on every keypress. The collapsed state is never painted (it happens
+    // and is undone within one JS task), but the scroll clamp persists.
+    // Restore the scroll position after the final height is applied.
+    // behavior: "instant" overrides the global `scroll-behavior: smooth`
+    // on <html> (styles.css), which would otherwise animate the restore.
+    // The browser's caret-reveal runs after input handlers, so the caret
+    // still scrolls into view when it genuinely leaves the viewport.
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
     textarea.style.height = "auto";
     textarea.style.height = textarea.scrollHeight + "px";
+    if (window.scrollX !== scrollX || window.scrollY !== scrollY) {
+      window.scrollTo({ left: scrollX, top: scrollY, behavior: "instant" });
+    }
   }
 
   /**
