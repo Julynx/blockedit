@@ -120,6 +120,14 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize the BlockManager: handles all block lifecycle
   const blockManager = new BlockManager(blocksContainer);
 
+  // Keep editor preferences (line wrap) in sync across windows, the same
+  // way the theme is synced above.
+  window.addEventListener("storage", (event) => {
+    if (event.key === EditorSettings.LINE_WRAP) {
+      blockManager.applyEditorPreferences();
+    }
+  });
+
   // Margin drag selection: rectangle select, Copy/Delete context menu
   const selectionManager = new SelectionManager(blockManager);
   window.selectionManager = selectionManager;

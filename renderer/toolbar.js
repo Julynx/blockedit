@@ -6,18 +6,37 @@
 // DOM; callers always receive a synchronous clone.
 const svgIconCache = new Map();
 
+// Editor-wide preferences persisted in localStorage (like the theme) and
+// shared by every block toolbar. Values are stored as "on"/"off" strings.
+const EditorSettings = {
+  LINE_WRAP: "lineWrap",
+
+  get(key, fallback) {
+    const value = localStorage.getItem(key);
+    if (value === null) return fallback;
+    return value === "on";
+  },
+
+  set(key, enabled) {
+    localStorage.setItem(key, enabled ? "on" : "off");
+  },
+};
+
 class Toolbar {
   constructor() {
     this.activePopup = null; // Tracks the currently open table grid popup
+    this.activeOptionsMenu = null; // Tracks the currently open options menu
   }
 
   /**
    * Creates a toolbar element and wires up all buttons.
    * @param {HTMLTextAreaElement} textarea - The textarea this toolbar controls
    * @param {function} onDelete - Called when the user deletes the block
+   * @param {Object} options - Optional callbacks for the extra options menu:
+   *   onToggleLineWrap(enabled)
    * @returns {HTMLElement} The toolbar DOM element
    */
-  createToolbar(textarea, onDelete) {
+  createToolbar(textarea, onDelete, options = {}) {
     const toolbar = document.createElement("div");
     toolbar.className = "block-toolbar";
 
@@ -87,6 +106,11 @@ class Toolbar {
       this._showTableGrid(e, textarea),
     );
 
+    // --- Extra options (editor preferences) ---
+    const optionsBtn = this._createIconButton("dots-vertical", "Options", (e) =>
+      this._showOptionsMenu(e, options),
+    );
+
     // Delete belongs at the far right of the bottom toolbar.
     const deleteBtn = this._createDeleteButton(onDelete);
 
@@ -112,6 +136,8 @@ class Toolbar {
       linkBtn,
       imageBtn,
       tableBtn,
+      this._createSeparator(),
+      optionsBtn,
       deleteBtn,
     );
     return toolbar;
@@ -897,6 +923,70 @@ class Toolbar {
   }
 
   /**
+   * Shows the extra options dropdown: editor preference toggles whose state
+   * is shown with a tick and persisted in localStorage (like the theme).
+   * Clicking an option toggles it and closes the menu.
+   */
+  _showOptionsMenu(event, options) {
+    event.stopPropagation();
+    this._closeOptionsMenu();
+
+    const button = event.currentTarget;
+    const rect = button.getBoundingClientRect();
+    const menu = document.createElement("div");
+    menu.className = "options-menu";
+    menu.style.left = `${rect.left}px`;
+    menu.style.top = `${rect.bottom + 8}px`;
+
+    const wrapOn = EditorSettings.get(EditorSettings.LINE_WRAP, true);
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "options-menu-item";
+    item.classList.toggle("checked", wrapOn);
+    item.setAttribute("aria-pressed", String(wrapOn));
+
+    const tick = document.createElement("span");
+    tick.className = "options-menu-tick";
+    tick.setAttribute("aria-hidden", "true");
+    this.loadSvgIcon("icons/check.svg", tick);
+
+    const label = document.createElement("span");
+    label.textContent = "Line wrap";
+
+    item.append(tick, label);
+    item.addEventListener("click", () => {
+      const next = !EditorSettings.get(EditorSettings.LINE_WRAP, true);
+      EditorSettings.set(EditorSettings.LINE_WRAP, next);
+      this._closeOptionsMenu();
+      options.onToggleLineWrap?.(next);
+    });
+    menu.appendChild(item);
+
+    // Keep clicks inside the menu from looking like clicks outside the block.
+    menu.addEventListener("click", (menuEvent) => menuEvent.stopPropagation());
+    document.body.appendChild(menu);
+    this.activeOptionsMenu = menu;
+
+    setTimeout(() => {
+      this._closeOptionsMenuBound = () => this._closeOptionsMenu();
+      document.addEventListener("click", this._closeOptionsMenuBound, {
+        once: true,
+      });
+    }, 0);
+  }
+
+  _closeOptionsMenu() {
+    if (this.activeOptionsMenu) {
+      this.activeOptionsMenu.remove();
+      this.activeOptionsMenu = null;
+    }
+    if (this._closeOptionsMenuBound) {
+      document.removeEventListener("click", this._closeOptionsMenuBound);
+      this._closeOptionsMenuBound = null;
+    }
+  }
+
+  /**
    * Shows a small popover with a URL input field.
    * Calls onSubmit(url) when the user presses Enter or clicks Confirm,
    * and onSubmit(null) if the popover is dismissed without submitting.
@@ -1227,3 +1317,4 @@ class Toolbar {
 
 // Export for use in other modules
 window.Toolbar = Toolbar;
+window.EditorSettings = EditorSettings;

@@ -914,6 +914,92 @@ body.selection-dragging {
 }
 
 /* ============================================
+   Options Menu (editor preferences dropdown)
+   ============================================ */
+.options-menu {
+  position: fixed; /* fixed: coordinates come from getBoundingClientRect (viewport-relative) */
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  background-color: var(--popover-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--popover-shadow);
+  padding: 4px;
+  z-index: 1000;
+}
+
+.options-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-color);
+  font-family: var(--font-family);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.options-menu-item:hover {
+  background: var(--button-hover);
+}
+
+/* Tick slot keeps a fixed width so the label stays aligned whether or not
+   the option is checked. */
+.options-menu-tick {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.options-menu-tick svg {
+  width: 16px;
+  height: 16px;
+  fill: var(--accent-color);
+  visibility: hidden;
+}
+
+.options-menu-item.checked .options-menu-tick svg {
+  visibility: visible;
+}
+
+/* ============================================
+   Line wrap off: horizontal scroll in edit mode
+   ============================================ */
+.block-editor-surface.nowrap .block-textarea {
+  white-space: pre;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* Keep search matches aligned with the unwrapped textarea content. */
+.block-editor-surface.nowrap .search-highlight-layer {
+  white-space: pre;
+}
+
+/* Thin themed horizontal scrollbar for unwrapped textareas */
+.block-textarea::-webkit-scrollbar {
+  height: 8px;
+}
+
+.block-textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.block-textarea::-webkit-scrollbar-thumb {
+  background: rgba(120, 120, 120, 0.55);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* ============================================
    URL Popover (for inserting links)
    ============================================ */
 .url-popover {

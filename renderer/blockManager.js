@@ -588,9 +588,19 @@ class BlockManager {
     blockEl.appendChild(editorSurface);
     block.textarea = textarea;
 
+    // Apply the persisted line-wrap preference.
+    this._applyLineWrap(
+      block,
+      EditorSettings.get(EditorSettings.LINE_WRAP, true),
+    );
+
     // Toolbar for formatting
-    const toolbarEl = this.toolbar.createToolbar(textarea, () =>
-      this.removeBlock(block.id),
+    const toolbarEl = this.toolbar.createToolbar(
+      textarea,
+      () => this.removeBlock(block.id),
+      {
+        onToggleLineWrap: (enabled) => this._applyLineWrap(block, enabled),
+      },
     );
     blockEl.appendChild(toolbarEl);
 
@@ -610,6 +620,36 @@ class BlockManager {
       // textarea.focus();
       this._autoResizeTextarea(textarea);
     }, 0);
+  }
+
+  /**
+   * Applies the line-wrap preference to a block being edited. When off, the
+   * textarea stops soft-wrapping and shows a horizontal scrollbar instead.
+   */
+  _applyLineWrap(block, wrapOn) {
+    if (!block?.textarea) return;
+    block.textarea.wrap = wrapOn ? "soft" : "off";
+    block.textarea
+      .closest(".block-editor-surface")
+      ?.classList.toggle("nowrap", !wrapOn);
+    // Wrapping changes the content height, so recompute the textarea size
+    // and re-align the search highlight layer with the new layout.
+    this._autoResizeTextarea(block.textarea);
+    window.searchManager?.refreshBlock(block.id);
+  }
+
+  /**
+   * Re-reads the persisted editor preferences and applies them to the block
+   * currently in edit mode. Called when another window changes a setting
+   * (localStorage "storage" event), mirroring the theme sync.
+   */
+  applyEditorPreferences() {
+    const block = this.activeEditBlock;
+    if (!block?.textarea) return;
+    this._applyLineWrap(
+      block,
+      EditorSettings.get(EditorSettings.LINE_WRAP, true),
+    );
   }
 
   /**
@@ -911,6 +951,17 @@ class BlockManager {
     const scrollY = window.scrollY;
     textarea.style.height = "auto";
     textarea.style.height = textarea.scrollHeight + "px";
+    // With line wrap off, a visible horizontal scrollbar eats into the
+    // content box; grow the textarea by its thickness so the last line is
+    // not clipped (overflow-y stays hidden).
+    if (
+      textarea.closest(".block-editor-surface")?.classList.contains("nowrap")
+    ) {
+      const hScrollbar = textarea.offsetHeight - textarea.clientHeight;
+      if (hScrollbar > 0) {
+        textarea.style.height = textarea.scrollHeight + hScrollbar + "px";
+      }
+    }
     if (window.scrollX !== scrollX || window.scrollY !== scrollY) {
       window.scrollTo({ left: scrollX, top: scrollY, behavior: "instant" });
     }

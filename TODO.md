@@ -12,11 +12,8 @@
 
 ## Nice to haves
 
-- [ ] Extra options menu in edit mode, for line wrapping.
+- [x] Extra options menu in edit mode, for line wrapping.
   - To the right of the table icon in the toolbar, insert a separator and a vertical three dots button that opens a dropdown.
     - In the dropdown, a single toggle: "Line wrap", with a tick indicating its state. By default, the tick is present (the app keeps wrapping lines as it does now).
       - Remember user setting across the app like the theme.
     - When "Line wrap" is off, a horizontal scrollbar is displayed for blocks in edit mode, and lines are not wrapped. This is useful, for example, to edit markdown pipe tables that are very wide without overflowing.
-- [ ] A second toggle for the extra options menu, this toggle is called "Column selection" and is off by default.
-  - Same styling as the "Line wrap" option, displaying a tick when it is toggled on and remembered across the app.
-  - In column selection mode, dragging the mouse inside the text box in edit mode will select rectangular areas of text across lines, in the same way vscode column selection mode works. This is especially useful to delete a column from a markdown table we no longer need.
