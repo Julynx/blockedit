@@ -483,6 +483,13 @@ class BlockManager {
    * Re-renders all blocks in the container.
    */
   async _renderAllBlocks(generation = this.documentGeneration) {
+    // A full re-render rebuilds every block's DOM, including the block in
+    // edit mode. Its textarea is recreated from block.content, so sync the
+    // uncommitted text first; otherwise deleting or moving another block
+    // discards text the user just typed or pasted.
+    if (this.activeEditBlock?.textarea) {
+      this.activeEditBlock.content = this.activeEditBlock.textarea.value;
+    }
     this.container.innerHTML = "";
     for (const block of this.blocks) {
       if (generation !== this.documentGeneration) return;
