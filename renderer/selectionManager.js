@@ -318,19 +318,13 @@ class SelectionManager {
     const text = this.blockManager.serializeBlocks(ids);
     try {
       await navigator.clipboard.writeText(text);
-      this._dispatchStatus(
+      EditorUtils.dispatchEditorStatus(
         `Copied ${ids.length} block${ids.length === 1 ? "" : "s"}`,
       );
     } catch (error) {
       console.error("Copy failed:", error);
-      this._dispatchStatus("Copy failed", true);
+      EditorUtils.dispatchEditorStatus("Copy failed", true);
     }
-  }
-
-  _dispatchStatus(message, isError = false) {
-    document.dispatchEvent(
-      new CustomEvent("editor-status", { detail: { message, isError } }),
-    );
   }
 
   // ===== Keyboard =====

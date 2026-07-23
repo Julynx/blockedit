@@ -1,5 +1,10 @@
 // searchManager.js - Literal document search and edit-mode highlighting.
 
+// Debounce before re-scanning the document after a query/case change.
+const REBUILD_DEBOUNCE_MS = 1000;
+// Grace period before hiding the search bar after its query is cleared.
+const HIDE_DELAY_MS = 400;
+
 class SearchManager {
   constructor(blockManager) {
     this.blockManager = blockManager;
@@ -47,6 +52,9 @@ class SearchManager {
       if (this.active) this.rebuild();
     });
     this.blockManager.onChange((change) => this._handleBlockChange(change));
+    // Keep the highlight layer aligned when a block's DOM changes for
+    // reasons other than typing (re-render, scroll, line-wrap toggle).
+    this.blockManager.onBlockDomChange((blockId) => this.refreshBlock(blockId));
     this.close();
   }
 
@@ -70,23 +78,29 @@ class SearchManager {
     this.input.blur();
   }
 
-  scheduleHide(force = false) {
+  /**
+   * Hides the search bar when it has no query. With delay=true (the query
+   * was just cleared by editing) the hide happens after a grace period and
+   * regardless of focus; otherwise (focus left the control) it happens
+   * immediately, but only when focus is really outside the control.
+   */
+  scheduleHide(delay = false) {
     clearTimeout(this.hideTimer);
     if (!this.active || this.query) return;
     const hide = () => {
       const focusInsideSearch = this.control.contains(document.activeElement);
-      if (!this.query && (force || !focusInsideSearch)) this.close();
+      if (!this.query && (delay || !focusInsideSearch)) this.close();
     };
-    if (!force) {
+    if (!delay) {
       hide();
       return;
     }
-    this.hideTimer = setTimeout(hide, 400);
+    this.hideTimer = setTimeout(hide, HIDE_DELAY_MS);
   }
 
   scheduleRebuild() {
     clearTimeout(this.rebuildTimer);
-    this.rebuildTimer = setTimeout(() => this.rebuild(true), 1000);
+    this.rebuildTimer = setTimeout(() => this.rebuild(true), REBUILD_DEBOUNCE_MS);
   }
 
   rebuild(resetCurrent = false) {
@@ -103,7 +117,7 @@ class SearchManager {
     for (const block of this.blockManager.blocks) {
       this._appendBlockOccurrences(block.id, this._blockText(block));
     }
-    this._linkNodes();
+    this._sortNodes();
     this.current = previousKey
       ? this._findClosest(previousKey) || this.nodes[0] || null
       : null;
@@ -119,7 +133,6 @@ class SearchManager {
     this.byBlock.delete(blockId);
     this._appendBlockOccurrences(blockId, content);
     this._sortNodes();
-    this._linkNodes();
     if (oldCurrent?.blockId === blockId) {
       const replacement = this.nodes.find(
         (node) => node.blockId === blockId && node.start >= (oldStart ?? 0),
@@ -217,8 +230,6 @@ class SearchManager {
         blockId,
         start: position,
         end: position + needle.length,
-        previous: null,
-        next: null,
       });
       position += needle.length;
     }
@@ -234,14 +245,6 @@ class SearchManager {
       (a, b) =>
         order.get(a.blockId) - order.get(b.blockId) || a.start - b.start,
     );
-  }
-
-  _linkNodes() {
-    this._sortNodes();
-    this.nodes.forEach((node, index) => {
-      node.previous = this.nodes[index - 1] || null;
-      node.next = this.nodes[index + 1] || null;
-    });
   }
 
   _findClosest(key) {
@@ -283,20 +286,14 @@ class SearchManager {
     let html = "";
     let cursor = 0;
     for (const occurrence of occurrences) {
-      html += this._escape(text.slice(cursor, occurrence.start));
+      html += EditorUtils.escapeHtml(text.slice(cursor, occurrence.start));
       const className = occurrence === this.current ? " current" : "";
-      html += `<mark class="search-match${className}">${this._escape(text.slice(occurrence.start, occurrence.end))}</mark>`;
+      html += `<mark class="search-match${className}">${EditorUtils.escapeHtml(text.slice(occurrence.start, occurrence.end))}</mark>`;
       cursor = occurrence.end;
     }
-    layer.innerHTML = html + this._escape(text.slice(cursor));
+    layer.innerHTML = html + EditorUtils.escapeHtml(text.slice(cursor));
     layer.scrollTop = block.textarea.scrollTop;
     layer.scrollLeft = block.textarea.scrollLeft;
-  }
-
-  _escape(text) {
-    const div = document.createElement("div");
-    div.textContent = text;
-    return div.innerHTML;
   }
 }
 

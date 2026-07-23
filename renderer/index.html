@@ -157,13 +157,18 @@
     <script src="../node_modules/diff/dist/diff.js"></script>
     <script src="highlight.js"></script>
 
-    <!-- Module scripts: loaded in order, each exposes a global class/object -->
+    <!-- Module scripts: loaded in dependency order, each exposes a global -->
+    <script src="utils.js"></script>
+    <script src="icons.js"></script>
     <script src="markdownConverter.js"></script>
+    <script src="popup.js"></script>
+    <script src="markdownEditing.js"></script>
     <script src="toolbar.js"></script>
     <script src="blockManager.js"></script>
     <script src="selectionManager.js"></script>
     <script src="searchManager.js"></script>
     <script src="tocManager.js"></script>
+    <script src="historyManager.js"></script>
     <script src="fileManager.js"></script>
     <script src="app.js"></script>
   </body>

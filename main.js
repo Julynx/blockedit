@@ -78,6 +78,15 @@ function pathsMatch(left, right) {
   return left && right && path.resolve(left) === path.resolve(right);
 }
 
+/**
+ * Clamps a zoom factor to the allowed range. Non-finite input falls back
+ * to the default zoom (1 = 100%).
+ */
+function clampZoom(requestedZoom) {
+  const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(requestedZoom)));
+  return Number.isFinite(zoom) ? zoom : 1;
+}
+
 async function writeFileAtomically(targetPath, content) {
   const directory = path.dirname(targetPath);
   const fileName = path.basename(targetPath);
@@ -226,8 +235,8 @@ app.on("window-all-closed", () => {
 // and perform privileged operations like reading/writing files.
 
 /**
- * Opens a file dialog to let the user pick a .md file.
- * Returns the file path and contents, or null if cancelled.
+ * Reads a Markdown file from disk after checking its size.
+ * Returns the file path and contents, or an error result.
  */
 async function readFile(state, filePath) {
   try {
@@ -244,10 +253,31 @@ async function readFile(state, filePath) {
   }
 }
 
+// --- Application & window state ---
+
 ipcMain.handle("app:initial-file-path", (event) => {
   return stateFromEvent(event)?.initialFilePath || null;
 });
 
+ipcMain.handle("app:close-response", (event, decision) => {
+  const state = stateFromEvent(event);
+  if (!state || !state.closeRequestPending) return false;
+  if (!["close", "cancel"].includes(decision)) return false;
+
+  state.closeRequestPending = false;
+  if (decision === "close") {
+    state.isClosing = true;
+    state.window.close();
+  }
+  return true;
+});
+
+// --- File operations ---
+
+/**
+ * Opens a file dialog to let the user pick a .md file.
+ * Returns the file path and contents, or null if cancelled.
+ */
 ipcMain.handle("file:open", async (event) => {
   const state = stateFromEvent(event);
   if (!state) return null;
@@ -268,29 +298,6 @@ ipcMain.handle("file:open-path", async (event, filePath) => {
   const state = stateFromEvent(event);
   if (!state || typeof filePath !== "string") return null;
   return readFile(state, filePath);
-});
-
-// Keep zoom changes in the main process so they use Electron's page zoom.
-ipcMain.handle("zoom:get", (event) => event.sender.getZoomFactor());
-
-ipcMain.handle("zoom:set", (event, requestedZoom) => {
-  const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Number(requestedZoom)));
-  const nextZoom = Number.isFinite(zoom) ? zoom : 1;
-  event.sender.setZoomFactor(nextZoom);
-  return nextZoom;
-});
-
-ipcMain.handle("zoom:change", (event, direction) => {
-  const currentZoom = event.sender.getZoomFactor();
-  const nextZoom = Math.min(
-    ZOOM_MAX,
-    Math.max(
-      ZOOM_MIN,
-      currentZoom + (direction === "in" ? ZOOM_STEP : -ZOOM_STEP),
-    ),
-  );
-  event.sender.setZoomFactor(nextZoom);
-  return nextZoom;
 });
 
 /**
@@ -317,6 +324,26 @@ ipcMain.handle("file:choose-image", async (event) => {
   }
 
   return { filePath: result.filePaths[0] };
+});
+
+// --- Page zoom ---
+
+// Keep zoom changes in the main process so they use Electron's page zoom.
+ipcMain.handle("zoom:get", (event) => event.sender.getZoomFactor());
+
+ipcMain.handle("zoom:set", (event, requestedZoom) => {
+  const nextZoom = clampZoom(requestedZoom);
+  event.sender.setZoomFactor(nextZoom);
+  return nextZoom;
+});
+
+ipcMain.handle("zoom:change", (event, direction) => {
+  const currentZoom = event.sender.getZoomFactor();
+  const nextZoom = clampZoom(
+    currentZoom + (direction === "in" ? ZOOM_STEP : -ZOOM_STEP),
+  );
+  event.sender.setZoomFactor(nextZoom);
+  return nextZoom;
 });
 
 /**
@@ -380,18 +407,7 @@ ipcMain.handle("file:clear-current-path", (event) => {
   return true;
 });
 
-ipcMain.handle("app:close-response", (event, decision) => {
-  const state = stateFromEvent(event);
-  if (!state || !state.closeRequestPending) return false;
-  if (!["close", "cancel"].includes(decision)) return false;
-
-  state.closeRequestPending = false;
-  if (decision === "close") {
-    state.isClosing = true;
-    state.window.close();
-  }
-  return true;
-});
+// --- Links ---
 
 /**
  * Opens a web link using the operating system's default browser.
@@ -507,6 +523,8 @@ ipcMain.handle("link:open-local", async (event, relativePath) => {
   }
 });
 
+// --- Dialogs ---
+
 /**
  * Shows a confirmation dialog for unsaved changes.
  * Returns 'save', 'dontsave', or 'cancel'.
@@ -527,6 +545,8 @@ ipcMain.handle("dialog:unsaved-changes", async (event) => {
   const responses = ["save", "dontsave", "cancel"];
   return responses[result.response];
 });
+
+// --- Markdown ---
 
 /**
  * Formats one block of Markdown using Prettier.

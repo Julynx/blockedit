@@ -2,6 +2,10 @@
 // Handles creating, editing, rendering, and organizing BlockEdit blocks.
 // Each block is a self-contained unit with edit and render modes.
 
+// Matches a URL protocol ("https:", "file:", ...). Used to tell absolute
+// references apart from relative, document-local ones.
+const URL_PROTOCOL_PATTERN = /^[a-z][a-z0-9+.-]*:/i;
+
 class BlockManager {
   /**
    * @param {HTMLElement} container - The DOM element that will hold all blocks
@@ -15,9 +19,12 @@ class BlockManager {
     this.selectionStartedInsideBlock = false;
     this.draggedBlockId = null;
     this.suppressNextRenderClick = false;
-    this.mutationQueue = Promise.resolve();
+    this._mutationQueue = EditorUtils.createPromiseQueue((error) =>
+      console.error("Block mutation failed:", error),
+    );
     this.documentGeneration = 0;
     this._changeCallbacks = [];
+    this._domChangeCallbacks = [];
     // Folder of the opened document, set by FileManager. Relative image
     // sources are resolved against it at render time; null for unsaved docs.
     this.documentDirectory = null;
@@ -121,14 +128,7 @@ class BlockManager {
     // mode so the user can immediately continue writing.
     const createdReplacement = this.blocks.length === 0;
     if (createdReplacement) {
-      this.blocks.push({
-        id: this._generateId(),
-        content: "",
-        mode: "render",
-        element: null,
-        textarea: null,
-        renderedDiv: null,
-      });
+      this.blocks.push(this._createBlockData(""));
     }
 
     await this._renderAllBlocks();
@@ -386,14 +386,7 @@ class BlockManager {
     });
     // If no blocks were parsed, create one empty block
     if (this.blocks.length === 0) {
-      this.blocks.push({
-        id: this._generateId(),
-        content: "",
-        mode: "render",
-        element: null,
-        textarea: null,
-        renderedDiv: null,
-      });
+      this.blocks.push(this._createBlockData(""));
     }
 
     await this._renderAllBlocks(generation);
@@ -445,7 +438,7 @@ class BlockManager {
   }
 
   whenIdle() {
-    return this.mutationQueue;
+    return this._mutationQueue.whenIdle();
   }
 
   /**
@@ -455,14 +448,23 @@ class BlockManager {
     this._changeCallbacks.push(callback);
   }
 
+  /**
+   * Registers a callback for block DOM changes that are not content edits:
+   * a block re-rendered, its textarea scrolled, or line wrap toggled.
+   * SearchManager uses it to keep its highlight layer aligned.
+   */
+  onBlockDomChange(callback) {
+    this._domChangeCallbacks.push(callback);
+  }
+
+  _notifyBlockDomChange(blockId) {
+    this._domChangeCallbacks.forEach((callback) => callback(blockId));
+  }
+
   // ===== Private Methods =====
 
   _enqueueMutation(operation) {
-    const nextOperation = this.mutationQueue.then(operation);
-    this.mutationQueue = nextOperation.catch((error) => {
-      console.error("Block mutation failed:", error);
-    });
-    return nextOperation;
+    return this._mutationQueue.enqueue(operation);
   }
 
   /**
@@ -536,11 +538,16 @@ class BlockManager {
     this._addPlusButtons(blockEl, block.id);
 
     block.element = blockEl;
-    window.searchManager?.refreshBlock(block.id);
+    this._notifyBlockDomChange(block.id);
+    this._insertBlockElement(blockEl, block);
+  }
 
-    // Insert the element at the block's correct position in the list.
-    // (appendChild would dump it at the end, making blocks "jump" to the
-    // bottom whenever they switch between edit and render mode.)
+  /**
+   * Inserts the element at the block's correct position in the list.
+   * (appendChild would dump it at the end, making blocks "jump" to the
+   * bottom whenever they switch between edit and render mode.)
+   */
+  _insertBlockElement(blockEl, block) {
     const nextBlock = this.blocks[this.blocks.indexOf(block) + 1];
     if (
       nextBlock &&
@@ -576,7 +583,7 @@ class BlockManager {
       });
     });
     textarea.addEventListener("scroll", () =>
-      window.searchManager?.refreshBlock(block.id),
+      this._notifyBlockDomChange(block.id),
     );
 
     // Keyboard handling inside the editor:
@@ -617,16 +624,14 @@ class BlockManager {
     tickBtn.type = "button";
     tickBtn.title = "Render (Shift+Enter)";
     tickBtn.setAttribute("aria-label", "Render (Shift+Enter)");
-    this.toolbar.loadSvgIcon("icons/check.svg", tickBtn);
+    IconLoader.load("icons/check.svg", tickBtn);
     tickBtn.addEventListener("click", () => this.renderBlock(block.id));
     blockEl.appendChild(tickBtn);
 
-    // Focus and auto-resize
-    setTimeout(() => {
-      // Temporarily disabled while investigating unexpected scroll behavior.
-      // textarea.focus();
-      this._autoResizeTextarea(textarea);
-    }, 0);
+    // Defer the initial auto-resize until the textarea has been laid out.
+    // Focusing here is intentionally omitted: it caused unexpected scroll
+    // behavior.
+    setTimeout(() => this._autoResizeTextarea(textarea), 0);
   }
 
   /**
@@ -642,7 +647,7 @@ class BlockManager {
     // Wrapping changes the content height, so recompute the textarea size
     // and re-align the search highlight layer with the new layout.
     this._autoResizeTextarea(block.textarea);
-    window.searchManager?.refreshBlock(block.id);
+    this._notifyBlockDomChange(block.id);
   }
 
   /**
@@ -665,6 +670,37 @@ class BlockManager {
    * so the user can see the block exists and knows to click it.
    */
   async _buildRenderMode(blockEl, block) {
+    this._attachDragAndDrop(blockEl, block);
+
+    const renderedDiv = document.createElement("div");
+    renderedDiv.className = "block-rendered";
+    await this._renderBlockHtml(renderedDiv, block);
+    this._resolveImageUrls(renderedDiv);
+    this._attachRenderedClickHandler(renderedDiv, block);
+
+    blockEl.appendChild(renderedDiv);
+    block.renderedDiv = renderedDiv;
+
+    // Render-mode delete action, revealed when the block is hovered.
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "render-delete-btn";
+    deleteBtn.type = "button";
+    deleteBtn.title = "Delete Block";
+    deleteBtn.setAttribute("aria-label", "Delete Block");
+    IconLoader.load("icons/trash.svg", deleteBtn);
+    deleteBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.removeBlock(block.id);
+    });
+    blockEl.appendChild(deleteBtn);
+  }
+
+  /**
+   * Makes a rendered block draggable. Dropping onto another block reorders
+   * the document; the midpoint of the target decides before/after.
+   */
+  _attachDragAndDrop(blockEl, block) {
     blockEl.draggable = true;
     blockEl.addEventListener("dragstart", (event) => {
       this.draggedBlockId = block.id;
@@ -705,43 +741,45 @@ class BlockManager {
         this.suppressNextRenderClick = false;
       }, 0);
     });
+  }
 
-    const renderedDiv = document.createElement("div");
-    renderedDiv.className = "block-rendered";
-
+  /**
+   * Fills the rendered div with the block's compiled HTML, or with a grey
+   * placeholder when the block is empty. The content-keyed cache avoids
+   * reconverting unchanged blocks on mode toggles and full-document
+   * re-renders.
+   */
+  async _renderBlockHtml(renderedDiv, block) {
     if (block.content.trim() === "") {
       // Placeholder for empty blocks
       const placeholder = document.createElement("span");
       placeholder.className = "block-placeholder";
       placeholder.textContent = "Click here and start typing ...";
       renderedDiv.appendChild(placeholder);
-    } else {
-      // Convert markdown to HTML using our modular converter. The content-
-      // keyed cache avoids reconverting unchanged blocks on mode toggles
-      // and full-document re-renders.
-      try {
-        if (block.renderCache?.content === block.content) {
-          renderedDiv.innerHTML = block.renderCache.html;
-        } else {
-          const html = await window.markdownConverter.convert(block.content);
-          renderedDiv.innerHTML = html;
-          block.renderCache = { content: block.content, html };
-        }
-      } catch (error) {
-        console.error("Failed to render markdown:", error);
-        document.dispatchEvent(
-          new CustomEvent("editor-status", {
-            detail: { message: "Rendering failed", isError: true },
-          }),
-        );
-        renderedDiv.textContent = block.content;
-      }
+      return;
     }
 
-    this._resolveImageUrls(renderedDiv);
+    // Convert markdown to HTML using our modular converter.
+    try {
+      if (block.renderCache?.content === block.content) {
+        renderedDiv.innerHTML = block.renderCache.html;
+      } else {
+        const html = await window.markdownConverter.convert(block.content);
+        renderedDiv.innerHTML = html;
+        block.renderCache = { content: block.content, html };
+      }
+    } catch (error) {
+      console.error("Failed to render markdown:", error);
+      EditorUtils.dispatchEditorStatus("Rendering failed", true);
+      renderedDiv.textContent = block.content;
+    }
+  }
 
-    // Links should be opened by the operating system's default browser, not
-    // navigated inside this Electron window. Other clicks still edit the block.
+  /**
+   * Links should be opened by the operating system's default browser, not
+   * navigated inside this Electron window. Other clicks still edit the block.
+   */
+  _attachRenderedClickHandler(renderedDiv, block) {
     renderedDiv.addEventListener("click", (event) => {
       const clickedElement =
         event.target instanceof Element
@@ -776,22 +814,11 @@ class BlockManager {
           .then((result) => {
             if (!result.success) {
               console.warn("Link was not opened:", result.error);
-              document.dispatchEvent(
-                new CustomEvent("editor-status", {
-                  detail: {
-                    message: "Link could not be opened",
-                    isError: true,
-                  },
-                }),
-              );
+              EditorUtils.dispatchEditorStatus("Link could not be opened", true);
             }
           })
           .catch(() => {
-            document.dispatchEvent(
-              new CustomEvent("editor-status", {
-                detail: { message: "Link could not be opened", isError: true },
-              }),
-            );
+            EditorUtils.dispatchEditorStatus("Link could not be opened", true);
           });
         return;
       }
@@ -802,23 +829,6 @@ class BlockManager {
       }
       this.editBlock(block.id);
     });
-
-    blockEl.appendChild(renderedDiv);
-    block.renderedDiv = renderedDiv;
-
-    // Render-mode delete action, revealed when the block is hovered.
-    const deleteBtn = document.createElement("button");
-    deleteBtn.className = "render-delete-btn";
-    deleteBtn.type = "button";
-    deleteBtn.title = "Delete Block";
-    deleteBtn.setAttribute("aria-label", "Delete Block");
-    this.toolbar.loadSvgIcon("icons/trash.svg", deleteBtn);
-    deleteBtn.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      this.removeBlock(block.id);
-    });
-    blockEl.appendChild(deleteBtn);
   }
 
   /**
@@ -830,7 +840,7 @@ class BlockManager {
     return (
       Boolean(href) &&
       !href.startsWith("#") &&
-      !/^[a-z][a-z0-9+.-]*:/i.test(href)
+      !URL_PROTOCOL_PATTERN.test(href)
     );
   }
 
@@ -849,7 +859,7 @@ class BlockManager {
       const src = img.getAttribute("src");
       if (!src || src.startsWith("#")) return;
 
-      if (/^[a-z][a-z0-9+.-]*:/i.test(src)) {
+      if (URL_PROTOCOL_PATTERN.test(src)) {
         // Windows-absolute paths (C:\...) look like a protocol but are local
         // files; convert them to file URLs the same way the toolbar does.
         if (/^[A-Za-z]:[\\/]/.test(src)) {
@@ -917,7 +927,7 @@ class BlockManager {
     plusTop.className = "block-plus block-plus-top";
     plusTop.title = "Insert block above";
     plusTop.setAttribute("aria-label", "Insert block above");
-    this.toolbar.loadSvgIcon("icons/plus.svg", plusTop);
+    IconLoader.load("icons/plus.svg", plusTop);
     plusTop.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -930,7 +940,7 @@ class BlockManager {
     plusBottom.className = "block-plus block-plus-bottom";
     plusBottom.title = "Insert block below";
     plusBottom.setAttribute("aria-label", "Insert block below");
-    this.toolbar.loadSvgIcon("icons/plus.svg", plusBottom);
+    IconLoader.load("icons/plus.svg", plusBottom);
     plusBottom.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();

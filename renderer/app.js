@@ -4,33 +4,25 @@
 
 // Wait for the DOM to be fully loaded before initializing
 document.addEventListener("DOMContentLoaded", () => {
+  // Load the icons of the header buttons and floating controls.
+  // Each entry is [iconReference, elementId].
+  const iconBindings = [
+    ["icons/search.svg", "search-btn"],
+    ["icons/previous-match.svg", "search-prev"],
+    ["icons/next-match.svg", "search-next"],
+    ["icons/case-sensitive.svg", "search-case"],
+    ["icons/moon.svg", "theme-toggle"],
+    ["icons/minus.svg", "zoom-out"],
+    ["icons/plus.svg", "zoom-in"],
+    ["icons/undo.svg", "undo-btn"],
+    ["icons/redo.svg", "redo-btn"],
+    ["icons/toc.svg", "toc-btn"],
+  ];
+  iconBindings.forEach(([iconReference, elementId]) =>
+    IconLoader.load(iconReference, document.getElementById(elementId)),
+  );
+
   const themeToggle = document.getElementById("theme-toggle");
-  const iconLoader = new Toolbar();
-  iconLoader.loadSvgIcon(
-    "icons/search.svg",
-    document.getElementById("search-btn"),
-  );
-  iconLoader.loadSvgIcon(
-    "icons/previous-match.svg",
-    document.getElementById("search-prev"),
-  );
-  iconLoader.loadSvgIcon(
-    "icons/next-match.svg",
-    document.getElementById("search-next"),
-  );
-  iconLoader.loadSvgIcon(
-    "icons/case-sensitive.svg",
-    document.getElementById("search-case"),
-  );
-  iconLoader.loadSvgIcon("icons/moon.svg", themeToggle);
-  iconLoader.loadSvgIcon(
-    "icons/minus.svg",
-    document.getElementById("zoom-out"),
-  );
-  iconLoader.loadSvgIcon("icons/plus.svg", document.getElementById("zoom-in"));
-  iconLoader.loadSvgIcon("icons/undo.svg", document.getElementById("undo-btn"));
-  iconLoader.loadSvgIcon("icons/redo.svg", document.getElementById("redo-btn"));
-  iconLoader.loadSvgIcon("icons/toc.svg", document.getElementById("toc-btn"));
   const savedTheme = localStorage.getItem("theme");
 
   const applyTheme = (theme) => {
@@ -130,15 +122,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Margin drag selection: rectangle select, Copy/Delete context menu
   const selectionManager = new SelectionManager(blockManager);
-  window.selectionManager = selectionManager;
 
   // Search observes block edits and controls edit-mode match navigation.
   const searchManager = new SearchManager(blockManager);
-  window.searchManager = searchManager;
 
   // Table of contents tracks committed block headings.
   const tocManager = new TocManager(blockManager);
-  window.tocManager = tocManager;
 
   // Initialize the FileManager: handles file I/O and committed history
   const fileManager = new FileManager(blockManager);

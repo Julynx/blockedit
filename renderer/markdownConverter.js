@@ -18,7 +18,7 @@ if (codeRenderer) {
   codeRenderer.code = (code, infostring, escaped) => {
     const language = (infostring || "").trim().split(/\s+/, 1)[0];
     const source = code.replace(/\n$/, "") + "\n";
-    let highlighted = escaped ? source : escapeHtml(source);
+    let highlighted = escaped ? source : EditorUtils.escapeHtml(source);
 
     if (
       language &&
@@ -37,7 +37,7 @@ if (codeRenderer) {
     }
 
     const languageClass = language
-      ? ` class="hljs language-${escapeHtml(language)}"`
+      ? ` class="hljs language-${EditorUtils.escapeHtml(language)}"`
       : ' class="hljs"';
     return `<pre><code${languageClass}>${highlighted}</code></pre>\n`;
   };
@@ -64,7 +64,7 @@ async function convertMarkdownToHtml(markdown) {
   // Safety check: if marked failed to load, return an escaped fallback
   if (typeof marked === "undefined") {
     console.error("marked library not loaded");
-    return `<pre>${escapeHtml(markdown)}</pre>`;
+    return `<pre>${EditorUtils.escapeHtml(markdown)}</pre>`;
   }
 
   try {
@@ -76,7 +76,7 @@ async function convertMarkdownToHtml(markdown) {
     return sanitizeHtml(rawHtml);
   } catch (error) {
     console.error("Markdown conversion error:", error);
-    return `<pre>${escapeHtml(markdown)}</pre>`;
+    return `<pre>${EditorUtils.escapeHtml(markdown)}</pre>`;
   }
 }
 
@@ -91,7 +91,7 @@ async function convertMarkdownToHtml(markdown) {
 function sanitizeHtml(html) {
   if (typeof DOMPurify === "undefined") {
     console.error("DOMPurify not loaded — refusing to render raw HTML");
-    return `<pre>${escapeHtml(html)}</pre>`;
+    return `<pre>${EditorUtils.escapeHtml(html)}</pre>`;
   }
 
   // Picked local images are stored as file URLs. DOMPurify's default URI
@@ -104,19 +104,6 @@ function sanitizeHtml(html) {
   return DOMPurify.sanitize(html, {
     ALLOWED_URI_REGEXP: allowedUriPattern,
   });
-}
-
-/**
- * Escapes HTML special characters to prevent injection.
- * Used as a fallback if conversion fails.
- *
- * @param {string} text - Raw text
- * @returns {string} Escaped text safe for HTML insertion
- */
-function escapeHtml(text) {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
 }
 
 // Export for use in other modules

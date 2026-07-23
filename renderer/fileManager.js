@@ -1,8 +1,8 @@
-// fileManager.js - File Operations & Committed History
-// Handles opening, saving, and creating new files, plus committed history.
+// fileManager.js - File Operations & Persistence
+// Handles opening, saving, and creating new files, the save-status UI, and
+// the commit-time persistence queue. Undo/redo history lives in
+// historyManager.js; this class wires it to persistence and the block model.
 // Communicates with the main process via the secure API exposed in preload.js.
-
-const MAX_HISTORY_BYTES = 256 * 1024 * 1024;
 
 class FileManager {
   /**
@@ -12,14 +12,13 @@ class FileManager {
     this.blockManager = blockManager;
     this.currentFilePath = null; // Path of the currently open file
     this.isDirty = false; // Whether there are unsaved changes
-    this.historyBase = null;
-    this.history = [];
-    this.historyIndex = 0;
-    this.historyBytes = 0;
-    this.historyMutationQueue = Promise.resolve();
-    this.historyRestorePendingSave = false;
     this.savePromise = null;
-    this.commitQueue = Promise.resolve();
+
+    // Committed changes are persisted one at a time, in order.
+    this.persistenceQueue = EditorUtils.createPromiseQueue((error) => {
+      console.error("Committed change failed:", error);
+      this._setStatus("Save failed", true);
+    });
 
     // UI elements
     this.fileNameEl = document.getElementById("file-name");
@@ -28,6 +27,24 @@ class FileManager {
     this.saveStatusTimer = null;
     document.addEventListener("editor-status", (event) => {
       this._setStatus(event.detail.message, event.detail.isError);
+    });
+
+    // Undo/redo history. The callbacks keep HistoryManager free of direct
+    // BlockManager/FileManager dependencies.
+    this.historyManager = new HistoryManager({
+      deserialize: async (content) => {
+        await this.blockManager.deserialize(content);
+        document.dispatchEvent(new CustomEvent("editor-document-replaced"));
+      },
+      persist: () =>
+        this._queuePersistence(() =>
+          this._persistContent(this.blockManager.serialize()),
+        ),
+      isDirty: () => this.isDirty,
+      onRestored: () => {
+        this.isDirty = true;
+        this._updateUI();
+      },
     });
 
     // Register for block edits and committed document changes.
@@ -44,8 +61,8 @@ class FileManager {
   async newFile() {
     const shouldProceed = await this._checkUnsavedChanges();
     if (!shouldProceed) return;
-    await this.historyMutationQueue;
-    await this.commitQueue;
+    await this.historyManager.whenIdle();
+    await this.persistenceQueue.whenIdle();
     await this.blockManager.whenIdle();
     await window.api.clearCurrentFilePath();
     document.dispatchEvent(new CustomEvent("editor-search-clear"));
@@ -53,8 +70,7 @@ class FileManager {
     this.currentFilePath = null;
     this.blockManager.documentDirectory = null;
     this.isDirty = false;
-    this.historyRestorePendingSave = false;
-    this._resetHistory();
+    this.historyManager.reset();
     this._updateUI();
 
     // Create default content: one block with an h1, in render mode
@@ -62,7 +78,7 @@ class FileManager {
 
     // Add an empty block in edit mode
     await this.blockManager.addBlock();
-    this.historyBase = this.blockManager.serialize();
+    this.historyManager.setBase(this.blockManager.serialize());
     document.dispatchEvent(new CustomEvent("editor-document-replaced"));
   }
 
@@ -73,8 +89,8 @@ class FileManager {
   async openFile(filePath = null) {
     const shouldProceed = await this._checkUnsavedChanges();
     if (!shouldProceed) return;
-    await this.historyMutationQueue;
-    await this.commitQueue;
+    await this.historyManager.whenIdle();
+    await this.persistenceQueue.whenIdle();
     await this.blockManager.whenIdle();
 
     try {
@@ -89,22 +105,21 @@ class FileManager {
       }
 
       await this.blockManager.whenIdle();
-      await this.commitQueue;
+      await this.persistenceQueue.whenIdle();
 
       this.currentFilePath = result.filePath;
       // Relative images resolve against the document folder at render time,
       // so the directory must be set before the blocks are deserialized.
       this.blockManager.documentDirectory = this._dirname(result.filePath);
       this.isDirty = false;
-      this.historyRestorePendingSave = false;
-      this._resetHistory();
-      this.historyBase = result.content;
+      this.historyManager.reset();
+      this.historyManager.setBase(result.content);
       this._updateUI();
       document.dispatchEvent(new CustomEvent("editor-search-clear"));
 
       // Load the file content into blocks
       await this.blockManager.deserialize(result.content);
-      this.historyBase = this.blockManager.serialize();
+      this.historyManager.setBase(this.blockManager.serialize());
       document.dispatchEvent(new CustomEvent("editor-document-replaced"));
       this._setStatus("Opened");
     } catch (error) {
@@ -131,15 +146,13 @@ class FileManager {
 
   async _saveFile() {
     try {
-      await this.commitQueue;
-      await this.historyMutationQueue;
+      await this.persistenceQueue.whenIdle();
+      await this.historyManager.whenIdle();
       await this.blockManager.whenIdle();
       await this.blockManager.flushActiveEdit();
       await this.blockManager.whenIdle();
       const content = this.blockManager.serialize();
-      if (!this.historyRestorePendingSave) {
-        this._recordCheckpoint(content);
-      }
+      this.historyManager.recordCheckpoint(content);
       return await this._persistContent(content, true);
     } catch (error) {
       console.error("Failed to save file:", error);
@@ -157,11 +170,23 @@ class FileManager {
 
   async handleCloseRequest() {
     if (this.savePromise) await this.savePromise;
-    await this.historyMutationQueue;
-    await this.commitQueue;
+    await this.historyManager.whenIdle();
+    await this.persistenceQueue.whenIdle();
     await this.blockManager.whenIdle();
     const shouldClose = await this._checkUnsavedChanges();
     await window.api.respondToClose(shouldClose ? "close" : "cancel");
+  }
+
+  /**
+   * Delegated to HistoryManager so buttons and shortcuts keep working
+   * against the same public API.
+   */
+  undo() {
+    return this.historyManager.undo();
+  }
+
+  redo() {
+    return this.historyManager.redo();
   }
 
   // ===== Private Methods =====
@@ -202,7 +227,7 @@ class FileManager {
    */
   _onContentChange(change = { type: "edit" }) {
     // A new edit starts a new history branch after undo/redo restoration.
-    this.historyRestorePendingSave = false;
+    this.historyManager.clearRestorePending();
     if (this.saveStatusEl.classList.contains("error")) {
       this._clearStatus();
     }
@@ -216,23 +241,16 @@ class FileManager {
 
   _queueCommit(content, previousContent = null) {
     this._queuePersistence(() => {
-      if (!this.historyRestorePendingSave) {
-        if (previousContent !== null) {
-          this._recordCheckpoint(previousContent);
-        }
-        this._recordCheckpoint(content);
+      if (previousContent !== null) {
+        this.historyManager.recordCheckpoint(previousContent);
       }
+      this.historyManager.recordCheckpoint(content);
       return this._persistContent(content);
     });
   }
 
   _queuePersistence(operation) {
-    const nextOperation = this.commitQueue.then(operation);
-    this.commitQueue = nextOperation.catch((error) => {
-      console.error("Committed change failed:", error);
-      this._setStatus("Save failed", true);
-    });
-    return nextOperation;
+    return this.persistenceQueue.enqueue(operation);
   }
 
   /**
@@ -270,7 +288,7 @@ class FileManager {
     const contentIsCurrent = this.blockManager.serialize() === content;
     this.isDirty = !contentIsCurrent;
     if (contentIsCurrent) {
-      this.historyRestorePendingSave = false;
+      this.historyManager.clearRestorePending();
       this._setStatus("Saved");
     }
     this._updateUI();
@@ -339,113 +357,7 @@ class FileManager {
       this.dirtyIndicatorEl.classList.remove("visible");
       document.title = `${displayName} - BlockEdit`;
     }
-    this._updateHistoryUI();
-  }
-
-  _resetHistory() {
-    this.historyBase = null;
-    this.history = [];
-    this.historyIndex = 0;
-    this.historyBytes = 0;
-  }
-
-  _recordCheckpoint(content) {
-    if (this.historyBase === null) {
-      this.historyBase = content;
-      this.history = [];
-      this.historyIndex = 0;
-      return;
-    }
-    const previous = this._contentAt(this.historyIndex);
-    if (previous === content) return;
-    this.history.splice(this.historyIndex);
-    this.history.push(Diff.diffChars(previous, content));
-    this.historyIndex = this.history.length;
-    this._pruneHistory();
-  }
-
-  _pruneHistory() {
-    this.historyBytes = this.history.reduce(
-      (total, diff) => total + this._estimateDiffBytes(diff),
-      0,
-    );
-
-    // Keep at least one checkpoint. A single very large diff is retained so
-    // the newest state remains available even if it exceeds the budget.
-    while (this.historyBytes > MAX_HISTORY_BYTES && this.history.length > 1) {
-      // The first diff becomes the new baseline when its checkpoint is dropped.
-      this.historyBase = this._contentAt(1);
-      this.history.shift();
-      this.historyIndex = Math.max(0, this.historyIndex - 1);
-      this.historyBytes = this.history.reduce(
-        (total, diff) => total + this._estimateDiffBytes(diff),
-        0,
-      );
-    }
-  }
-
-  _estimateDiffBytes(diff) {
-    // Account for UTF-16 string storage plus a small per-change object cost.
-    return diff.reduce((total, part) => total + part.value.length * 2 + 32, 0);
-  }
-
-  _contentAt(index) {
-    let content = this.historyBase;
-    for (let i = 0; i < index; i++) {
-      content = this.history[i]
-        .filter((part) => !part.removed)
-        .map((part) => part.value)
-        .join("");
-    }
-    return content;
-  }
-
-  async _loadHistory(index) {
-    await this.blockManager.deserialize(this._contentAt(index));
-    document.dispatchEvent(new CustomEvent("editor-document-replaced"));
-    this.historyIndex = index;
-    // Deserialization intentionally does not notify the change listener.
-    // Restore persistence does not create a new checkpoint.
-    this.historyRestorePendingSave = true;
-    this.isDirty = true;
-    this._updateUI();
-    await this._queuePersistence(() =>
-      this._persistContent(this.blockManager.serialize()),
-    );
-  }
-
-  undo() {
-    return this._enqueueHistoryMutation(async () => {
-      if (this.historyBase === null) return;
-      if (this.isDirty) await this._loadHistory(this.historyIndex);
-      if (this.historyIndex > 0) await this._loadHistory(this.historyIndex - 1);
-    });
-  }
-
-  redo() {
-    return this._enqueueHistoryMutation(async () => {
-      if (this.historyBase === null) return;
-      if (this.isDirty) await this._loadHistory(this.historyIndex);
-      if (this.historyIndex < this.history.length) {
-        await this._loadHistory(this.historyIndex + 1);
-      }
-    });
-  }
-
-  _enqueueHistoryMutation(operation) {
-    const nextOperation = this.historyMutationQueue.then(operation);
-    this.historyMutationQueue = nextOperation.catch((error) => {
-      console.error("History mutation failed:", error);
-    });
-    return nextOperation;
-  }
-
-  _updateHistoryUI() {
-    const enabled = this.historyBase !== null;
-    document.getElementById("undo-btn").disabled =
-      !enabled || this.historyIndex === 0;
-    document.getElementById("redo-btn").disabled =
-      !enabled || this.historyIndex === this.history.length;
+    this.historyManager.updateButtons();
   }
 }
 
