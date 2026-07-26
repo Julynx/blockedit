@@ -149,7 +149,7 @@ class SelectionManager {
    * jumping between integer steps at the zone boundary.
    */
   _applyEdgeScroll() {
-    const velocity = this._edgeScrollVelocity(this.lastClientY);
+    const velocity = EditorUtils.edgeScrollVelocity(this.lastClientY);
     if (velocity === 0) {
       this.scrollAccumulator = 0;
       return;
@@ -160,22 +160,6 @@ class SelectionManager {
     if (step !== 0) {
       window.scrollBy({ top: step, behavior: "instant" });
     }
-  }
-
-  /**
-   * Scroll speed (px/frame) based on pointer proximity to the top/bottom
-   * viewport edge.
-   */
-  _edgeScrollVelocity(clientY) {
-    const zone = 48;
-    const maxSpeed = 18;
-    if (clientY < zone) {
-      return -((zone - clientY) / zone) * maxSpeed;
-    }
-    if (clientY > window.innerHeight - zone) {
-      return ((clientY - (window.innerHeight - zone)) / zone) * maxSpeed;
-    }
-    return 0;
   }
 
   /**

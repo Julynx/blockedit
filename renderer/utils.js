@@ -29,6 +29,24 @@ const EditorUtils = {
   },
 
   /**
+   * Auto-scroll speed (px/frame) for edge-of-viewport dragging, shared by
+   * margin-drag selection and block drag-reorder so both feel identical.
+   * Ramps linearly from 0 at the zone boundary to maxSpeed at the edge.
+   * @param {number} clientY - Pointer position in viewport space
+   */
+  edgeScrollVelocity(clientY) {
+    const zone = 48;
+    const maxSpeed = 18;
+    if (clientY < zone) {
+      return -((zone - clientY) / zone) * maxSpeed;
+    }
+    if (clientY > window.innerHeight - zone) {
+      return ((clientY - (window.innerHeight - zone)) / zone) * maxSpeed;
+    }
+    return 0;
+  },
+
+  /**
    * Escapes HTML special characters to prevent injection.
    * @param {string} text - Raw text
    * @returns {string} Escaped text safe for HTML insertion

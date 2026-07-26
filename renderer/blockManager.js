@@ -19,6 +19,13 @@ class BlockManager {
     this.selectionStartedInsideBlock = false;
     this.draggedBlockId = null;
     this.suppressNextRenderClick = false;
+    // Block drag auto-scroll state. The pointer position comes from
+    // document-level dragover events: mousemove does not fire during a
+    // native HTML5 drag, but dragover bubbles up from whatever element is
+    // under the cursor and carries clientY.
+    this.dragScrollAnimationId = null;
+    this.dragScrollAccumulator = 0;
+    this.lastDragClientY = 0;
     this._mutationQueue = EditorUtils.createPromiseQueue((error) =>
       console.error("Block mutation failed:", error),
     );
@@ -37,6 +44,9 @@ class BlockManager {
       );
     });
     document.addEventListener("click", (e) => this._handleDocumentClick(e));
+    document.addEventListener("dragover", (event) => {
+      if (this.draggedBlockId) this.lastDragClientY = event.clientY;
+    });
   }
 
   /**
@@ -708,6 +718,8 @@ class BlockManager {
       blockEl.classList.add("dragging");
       event.dataTransfer.effectAllowed = "move";
       event.dataTransfer.setData("text/plain", block.id);
+      this.lastDragClientY = event.clientY;
+      this._startDragScroll();
     });
     blockEl.addEventListener("dragover", (event) => {
       if (!this.draggedBlockId || this.draggedBlockId === block.id) return;
@@ -814,7 +826,10 @@ class BlockManager {
           .then((result) => {
             if (!result.success) {
               console.warn("Link was not opened:", result.error);
-              EditorUtils.dispatchEditorStatus("Link could not be opened", true);
+              EditorUtils.dispatchEditorStatus(
+                "Link could not be opened",
+                true,
+              );
             }
           })
           .catch(() => {
@@ -838,9 +853,7 @@ class BlockManager {
    */
   _isRelativeReference(href) {
     return (
-      Boolean(href) &&
-      !href.startsWith("#") &&
-      !URL_PROTOCOL_PATTERN.test(href)
+      Boolean(href) && !href.startsWith("#") && !URL_PROTOCOL_PATTERN.test(href)
     );
   }
 
@@ -907,6 +920,7 @@ class BlockManager {
 
   _clearDragState() {
     this.draggedBlockId = null;
+    this._stopDragScroll();
     this.container
       .querySelectorAll(".dragging, .drag-over-top, .drag-over-bottom")
       .forEach((element) =>
@@ -916,6 +930,52 @@ class BlockManager {
           "drag-over-bottom",
         ),
       );
+  }
+
+  /**
+   * Runs the edge auto-scroll loop for the duration of a block drag. One
+   * scroll update per animation frame, like the margin-drag selection, so
+   * the speed ramp stays smooth and consistent between both features.
+   */
+  _startDragScroll() {
+    this._stopDragScroll();
+    this.dragScrollAccumulator = 0;
+    const frameStep = () => {
+      if (!this.draggedBlockId) {
+        this.dragScrollAnimationId = null;
+        return;
+      }
+      this._applyDragEdgeScroll();
+      this.dragScrollAnimationId = requestAnimationFrame(frameStep);
+    };
+    this.dragScrollAnimationId = requestAnimationFrame(frameStep);
+  }
+
+  _stopDragScroll() {
+    if (this.dragScrollAnimationId !== null) {
+      cancelAnimationFrame(this.dragScrollAnimationId);
+      this.dragScrollAnimationId = null;
+    }
+  }
+
+  /**
+   * Scrolls when the drag pointer rests near the top/bottom viewport edge.
+   * Uses behavior:"instant" to override the global smooth-scroll CSS (see
+   * SelectionManager._applyEdgeScroll) and a fractional accumulator so the
+   * speed ramps smoothly instead of jumping between integer steps.
+   */
+  _applyDragEdgeScroll() {
+    const velocity = EditorUtils.edgeScrollVelocity(this.lastDragClientY);
+    if (velocity === 0) {
+      this.dragScrollAccumulator = 0;
+      return;
+    }
+    this.dragScrollAccumulator += velocity;
+    const step = Math.trunc(this.dragScrollAccumulator);
+    this.dragScrollAccumulator -= step;
+    if (step !== 0) {
+      window.scrollBy({ top: step, behavior: "instant" });
+    }
   }
 
   /**
