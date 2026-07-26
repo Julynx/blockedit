@@ -448,7 +448,7 @@ const MarkdownEditing = (() => {
    */
   function insertHorizontalRule(textarea) {
     const { lineEnd } = getLineContext(textarea);
-    const insertion = "\n\n---\n\n";
+    const insertion = "\n\n----\n\n";
 
     replaceRange(textarea, lineEnd, lineEnd, insertion);
     setCursor(textarea, lineEnd + insertion.length);
