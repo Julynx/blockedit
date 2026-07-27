@@ -234,13 +234,14 @@ class SelectionManager {
     const target = event.target instanceof Element ? event.target : null;
     const blockEl = target?.closest(".block");
 
-    // Only selected blocks offer actions; anything else keeps the default.
-    if (
-      !blockEl ||
-      !this.blockManager.selectedBlockIds.has(blockEl.dataset.blockId)
-    ) {
+    if (!blockEl) {
       this._closeMenu();
       return;
+    }
+
+    // Right-clicking a non-selected block selects it, clearing any existing selection.
+    if (!this.blockManager.selectedBlockIds.has(blockEl.dataset.blockId)) {
+      this.blockManager.selectBlocks([blockEl.dataset.blockId]);
     }
 
     event.preventDefault();

@@ -73,11 +73,10 @@ class FileManager {
     this.historyManager.reset();
     this._updateUI();
 
-    // Create default content: one block with an h1, in render mode
-    await this.blockManager.deserialize("# New document");
-
-    // Add an empty block in edit mode
-    await this.blockManager.addBlock();
+    // Create default content: a single empty block in render mode.
+    // Deserializing does not notify changes, so the new file stays unmodified
+    // and closing / New / Open will not prompt to save until the user edits it.
+    await this.blockManager.deserialize("");
     this.historyManager.setBase(this.blockManager.serialize());
     document.dispatchEvent(new CustomEvent("editor-document-replaced"));
   }

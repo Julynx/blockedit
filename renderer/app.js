@@ -143,7 +143,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }),
   );
 
-  // Start with a new file (which creates a default "New document" block)
+  // Start with a new file (a single empty block in render mode)
   const startupControls = [
     "btn-new",
     "btn-open",
