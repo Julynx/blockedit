@@ -4,7 +4,13 @@ _A markdown editor with draggable blocks and a beautiful UI._
 
 <a href="https://github.com/Julynx/blockedit/releases/latest/download/BlockEdit_Setup.exe" target="_blank">
 <img src="https://raw.githubusercontent.com/Julynx/julynx/refs/heads/main/assets/download.png" height="48">
-</a><br><br>
+</a>
+
+<a href="https://github.com/Julynx/blockedit/releases/latest/download/BlockEdit_Setup.appimage" target="_blank">
+<img src="https://raw.githubusercontent.com/Julynx/julynx/refs/heads/main/assets/download-linux.png" height="48">
+</a>
+
+<br><br>
 
 ![alt text](assets/screenshot.png)
 
