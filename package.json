@@ -6,7 +6,8 @@
   "scripts": {
     "start": "electron .",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win",
+    "dist:linux": "electron-builder --linux"
   },
   "keywords": [
     "markdown",
@@ -39,12 +40,20 @@
       "target": "nsis",
       "icon": "assets/app-icon.ico"
     },
+    "linux": {
+      "target": "AppImage",
+      "category": "Office",
+      "icon": "assets/logo.png"
+    },
     "fileAssociations": [
       {
-        "ext": [
-          "md",
-          "markdown"
-        ],
+        "ext": "md",
+        "name": "Markdown document",
+        "description": "Markdown document",
+        "role": "Editor"
+      },
+      {
+        "ext": "markdown",
         "name": "Markdown document",
         "description": "Markdown document",
         "role": "Editor"
@@ -54,5 +63,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     }
+  },
+  "allowScripts": {
+    "electron@37.10.3": true
   }
 }

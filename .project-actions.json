@@ -25,10 +25,16 @@
       "color": "#eb93e4"
     },
     {
-      "text": "$(package) Build Installer",
+      "text": "$(package) Build Installer (win)",
       "command": "npm run dist",
       "tooltip": "Build Windows installer",
       "color": "#93c5fd"
+    },
+    {
+      "text": "$(package) Build AppImage (linux)",
+      "command": "npm run dist:linux",
+      "tooltip": "Build Linux AppImage",
+      "color": "#fdba93"
     }
   ]
 }
